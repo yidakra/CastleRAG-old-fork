@@ -260,7 +260,11 @@ def run_eval(
     """
     cfg = load_config(override_path=config_path)
     if default_day is not None:
-        cfg.retrieval.default_day = default_day
+        # Plain attribute assignment skips the field validator; rebuild the
+        # model so an invalid --day is rejected instead of reaching the filter.
+        cfg.retrieval = cfg.retrieval.model_validate(
+            {**cfg.retrieval.model_dump(), "default_day": default_day}
+        )
     selected = select_questions(
         questions,
         question_ids=question_ids,

@@ -857,3 +857,16 @@ class TestDefaultDay:
         with pytest.raises(ValueError, match="default_day"):
             RetrievalConfig(default_day="day5")
 
+    def test_run_eval_rejects_invalid_default_day(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        with pytest.raises(ValueError, match="default_day"):
+            run_eval(
+                _questions_dict(["q1"]),
+                out_dir=tmp_path,
+                pipeline=pipeline,
+                default_day="day9",
+            )
+        assert not seen
+

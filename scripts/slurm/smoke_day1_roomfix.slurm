@@ -26,7 +26,9 @@ set -euo pipefail
 
 CONF="${CONF:-configs/snellius_me.yaml}"   # override: sbatch --export=ALL,CONF=configs/snellius_fixedcams.yaml
 DAY="${DAY:-}"   # e.g. DAY=day1: pin retrieval to day 1 for questions that name no day (multi-day index)
-EXCLUDE="${EXCLUDE:-}"   # e.g. EXCLUDE=Kitchen,Living1,Living2,Meeting,Reading: ego-only retrieval ablation
+# EXCLUDE=fixed: ego-only retrieval ablation (all room cameras); EXCLUDE=Kitchen:Reading for
+# a custom list. Use colons, not commas: `sbatch --export` splits its value on commas.
+EXCLUDE="${EXCLUDE:-}"
 SC="/scratch-shared/${USER}"
 QFILE="data/smoke_day1_questions.json"
 NQ=40

@@ -916,7 +916,10 @@ def smoke_test(
     exclude_cameras: Optional[str] = typer.Option(
         None,
         "--exclude-cameras",
-        help="Comma-separated camera ids hard-excluded from retrieval (ablation).",
+        help=(
+            "Camera ids hard-excluded from retrieval (ablation), separated by "
+            "commas or colons; 'fixed' = all room cameras, 'ego' = all wearables."
+        ),
     ),
 ) -> None:
     """5-question end-to-end smoke test (issue #15)."""
@@ -939,7 +942,11 @@ def smoke_test(
             use_wandb=wandb,
             default_day=day,
             exclude_cameras=(
-                [c.strip() for c in exclude_cameras.split(",") if c.strip()]
+                [
+                    c.strip()
+                    for c in exclude_cameras.replace(":", ",").split(",")
+                    if c.strip()
+                ]
                 if exclude_cameras is not None
                 else None
             ),

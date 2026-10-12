@@ -273,6 +273,7 @@ def run_eval(
         cfg.retrieval = cfg.retrieval.model_validate(
             {**cfg.retrieval.model_dump(), "exclude_cameras": list(exclude_cameras)}
         )
+    cfg.retrieval.exclude_cameras = _expand_camera_groups(cfg)
     known = set(cfg.dataset.ego_cameras) | set(cfg.dataset.exo_cameras)
     unknown = sorted(set(cfg.retrieval.exclude_cameras) - known)
     if unknown:
@@ -414,6 +415,21 @@ def run_eval(
         n_graded=n_graded,
         support_split=support_split,
     )
+
+
+def _expand_camera_groups(cfg: CastleRAGConfig) -> List[str]:
+    """Expand the ``fixed`` / ``ego`` keywords in ``retrieval.exclude_cameras``.
+
+    ``fixed`` stands for every room camera (``dataset.exo_cameras``) and ``ego``
+    for every wearable one (``dataset.ego_cameras``), so an ego-only ablation
+    is ``--exclude-cameras fixed`` rather than a comma list that
+    ``sbatch --export`` would split apart. Order is kept, duplicates dropped.
+    """
+    groups = {"fixed": cfg.dataset.exo_cameras, "ego": cfg.dataset.ego_cameras}
+    expanded: List[str] = []
+    for cam in cfg.retrieval.exclude_cameras:
+        expanded.extend(groups.get(cam, [cam]))
+    return list(dict.fromkeys(expanded))
 
 
 def _resolve_output_paths(

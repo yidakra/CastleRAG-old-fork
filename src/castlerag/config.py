@@ -138,8 +138,9 @@ class RetrievalConfig(BaseModel):
     # mixed-day bank. Cross-day questions keep day=None.
     default_day: Optional[str] = None
     # Camera ids hard-excluded from every retrieval lane (the same path the UI
-    # uses for reviewer-rejected cameras). Evaluation ablations only, e.g. the
-    # five room cameras to reproduce an ego-only index on a full one.
+    # uses for reviewer-rejected cameras). Evaluation ablations only; "fixed"
+    # expands to every room camera and "ego" to every wearable one, so
+    # ["fixed"] reproduces an ego-only index on a full one.
     exclude_cameras: List[str] = Field(default_factory=list)
     visual_text_route_weights: Dict[str, float] = Field(
         default_factory=lambda: {

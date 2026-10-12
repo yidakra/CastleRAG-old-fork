@@ -935,3 +935,14 @@ class TestExcludeCameras:
                 exclude_cameras=["Kitchen", "Nobody"],
             )
 
+    def test_fixed_keyword_expands_to_room_cameras(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing()
+        run_eval(
+            _questions_dict(["q1"]),
+            out_dir=tmp_path,
+            pipeline=pipeline,
+            exclude_cameras=["fixed", "Allie", "Kitchen"],
+        )
+        cfg = load_config()
+        assert seen["q1"].exclude_cameras == (*cfg.dataset.exo_cameras, "Allie")
+

@@ -91,7 +91,8 @@ retrieval:
   # Pin retrieval to one day for questions that name none (day1..day4); null
   # searches every indexed day. Set only for a single-day question set.
   default_day: null
-  # Camera ids hard-excluded from every retrieval lane (evaluation ablations).
+  # Camera ids hard-excluded from every retrieval lane (evaluation ablations);
+  # "fixed" = every room camera, "ego" = every wearable camera.
   exclude_cameras: []
   visual_text_route_weights:
     static_visual: 2.0

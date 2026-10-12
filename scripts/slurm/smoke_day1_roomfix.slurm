@@ -26,6 +26,7 @@ set -euo pipefail
 
 CONF="${CONF:-configs/snellius_me.yaml}"   # override: sbatch --export=ALL,CONF=configs/snellius_fixedcams.yaml
 DAY="${DAY:-}"   # e.g. DAY=day1: pin retrieval to day 1 for questions that name no day (multi-day index)
+EXCLUDE="${EXCLUDE:-}"   # e.g. EXCLUDE=Kitchen,Living1,Living2,Meeting,Reading: ego-only retrieval ablation
 SC="/scratch-shared/${USER}"
 QFILE="data/smoke_day1_questions.json"
 NQ=40
@@ -107,8 +108,8 @@ OMNIEMBED_URL="http://localhost:8200/v1" \
 # --- 40-question day-1 smoke eval (retrieve -> rerank -> generate) ---
 export VLLM_BASE_URL="http://localhost:8201/v1"
 export OMNIEMBED_QUERY_CACHE="${SMOKE_CACHE}"
-echo "[smoke] === smoke-test (${NQ} questions, ${QFILE}, default_day=${DAY:-none}) ==="
-castlerag smoke-test "${QFILE}" --n "${NQ}" --config "${CONF}" ${DAY:+--day "${DAY}"}
+echo "[smoke] === smoke-test (${NQ} questions, ${QFILE}, default_day=${DAY:-none} exclude=${EXCLUDE:-none}) ==="
+castlerag smoke-test "${QFILE}" --n "${NQ}" --config "${CONF}" ${DAY:+--day "${DAY}"} ${EXCLUDE:+--exclude-cameras "${EXCLUDE}"}
 
 OUT="${OUTPUTS_DIR}/smoke_test"
 echo "[smoke] === metrics.json ==="

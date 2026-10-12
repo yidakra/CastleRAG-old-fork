@@ -162,8 +162,9 @@ def run_question(
     except Exception as exc:
         raise _stage_failure_error("routing", question.question_id, exc) from exc
 
-    if exclude_cameras:
-        hints.exclude_cameras = tuple(exclude_cameras)
+    excluded = tuple(dict.fromkeys([*cfg.retrieval.exclude_cameras, *exclude_cameras]))
+    if excluded:
+        hints.exclude_cameras = excluded
     if hints.day is None and not hints.day_comparison and cfg.retrieval.default_day:
         hints.day = cfg.retrieval.default_day
 
@@ -247,11 +248,14 @@ def run_eval(
     pipeline: Optional[EvalPipeline] = None,
     use_wandb: bool = False,
     default_day: Optional[str] = None,
+    exclude_cameras: Optional[Sequence[str]] = None,
 ) -> EvalRunResult:
     """Run the full prediction loop and write output files.
 
     ``default_day`` overrides ``retrieval.default_day`` from the config: every
     question without an explicit day mention is retrieved from that day only.
+    ``exclude_cameras`` overrides ``retrieval.exclude_cameras``: those camera
+    ids are hard-excluded from every retrieval lane. Unknown ids are rejected.
 
     The runner writes rich predictions, evidence traces, official submission
     export, and metrics for every run. Accuracy is populated only when a
@@ -264,6 +268,17 @@ def run_eval(
         # model so an invalid --day is rejected instead of reaching the filter.
         cfg.retrieval = cfg.retrieval.model_validate(
             {**cfg.retrieval.model_dump(), "default_day": default_day}
+        )
+    if exclude_cameras is not None:
+        cfg.retrieval = cfg.retrieval.model_validate(
+            {**cfg.retrieval.model_dump(), "exclude_cameras": list(exclude_cameras)}
+        )
+    known = set(cfg.dataset.ego_cameras) | set(cfg.dataset.exo_cameras)
+    unknown = sorted(set(cfg.retrieval.exclude_cameras) - known)
+    if unknown:
+        raise ValueError(
+            f"retrieval.exclude_cameras: unknown camera ids {unknown} "
+            f"(known: {sorted(known)})"
         )
     selected = select_questions(
         questions,

@@ -128,13 +128,19 @@ class RetrievalConfig(BaseModel):
     # multimodal fusion pass per question route (dense lanes weigh 1.0/0.7/0.9
     # per query variant). Only used when visual_text.json exists.
     visual_text_top_k: int = 20
-    # Day to pin retrieval to when the question itself names none. The router
-    # only sets a day hint for an explicit mention ("on the first day", "day
-    # 2"); on a multi-day index every other question searches all days and the
-    # per-lane budgets fill with other days' clips. Set this when the question
-    # set is known to be about one day (the CASTLE day-1 smoke set); leave it
-    # unset for a mixed-day bank. Cross-day questions keep day=None.
+    # Day hint to use when the question itself names none. The router only
+    # sets a day hint for an explicit mention ("on the first day", "day 2");
+    # on a multi-day index every other question searches all days and the
+    # per-lane budgets fill with other days' clips. The hint is a hard filter
+    # on the dense lanes and a rank bonus on the BM25 lanes, exactly like a
+    # router-extracted day. Set this when the question set is known to be
+    # about one day (the CASTLE day-1 smoke set); leave it unset for a
+    # mixed-day bank. Cross-day questions keep day=None.
     default_day: Optional[str] = None
+    # Camera ids hard-excluded from every retrieval lane (the same path the UI
+    # uses for reviewer-rejected cameras). Evaluation ablations only, e.g. the
+    # five room cameras to reproduce an ego-only index on a full one.
+    exclude_cameras: List[str] = Field(default_factory=list)
     visual_text_route_weights: Dict[str, float] = Field(
         default_factory=lambda: {
             "static_visual": 2.0,

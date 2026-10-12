@@ -870,3 +870,68 @@ class TestDefaultDay:
             )
         assert not seen
 
+
+# ---------------------------------------------------------------------------
+# retrieval.exclude_cameras
+# ---------------------------------------------------------------------------
+
+
+class TestExcludeCameras:
+    """``retrieval.exclude_cameras`` is merged into the hints' hard exclusion."""
+
+    def _pipeline_capturing(self):
+        seen: Dict[str, RouteHints] = {}
+
+        def _retrieve(question: EvalQuestion, hints: RouteHints) -> List[RetrievalHit]:
+            seen[question.question_id] = hints
+            return [_make_hit(f"{question.question_id}_1")]
+
+        return (
+            EvalPipeline(
+                route=lambda q, a: RouteHints(route="speech_text"),
+                retrieve=_retrieve,
+                rerank=_default_rerank,
+                generate=_default_generate,
+            ),
+            seen,
+        )
+
+    def test_config_exclusions_reach_hints(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["Kitchen", "Reading"]
+        pipeline, seen = self._pipeline_capturing()
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].exclude_cameras == ("Kitchen", "Reading")
+
+    def test_caller_exclusions_merge_without_duplicates(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["Kitchen"]
+        pipeline, seen = self._pipeline_capturing()
+        run_question(
+            pipeline, cfg, _make_question("q1"), exclude_cameras=["Allie", "Kitchen"]
+        )
+        assert seen["q1"].exclude_cameras == ("Kitchen", "Allie")
+
+    def test_unset_leaves_hints_alone(self):
+        cfg = load_config()
+        pipeline, seen = self._pipeline_capturing()
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].exclude_cameras == ()
+
+    def test_run_eval_override_and_validation(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing()
+        run_eval(
+            _questions_dict(["q1"]),
+            out_dir=tmp_path,
+            pipeline=pipeline,
+            exclude_cameras=["Kitchen"],
+        )
+        assert seen["q1"].exclude_cameras == ("Kitchen",)
+        with pytest.raises(ValueError, match="unknown camera ids"):
+            run_eval(
+                _questions_dict(["q2"]),
+                out_dir=tmp_path,
+                pipeline=pipeline,
+                exclude_cameras=["Kitchen", "Nobody"],
+            )
+

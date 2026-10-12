@@ -913,6 +913,11 @@ def smoke_test(
         "--day",
         help="Pin retrieval to this day (day1..day4) for questions that name none.",
     ),
+    exclude_cameras: Optional[str] = typer.Option(
+        None,
+        "--exclude-cameras",
+        help="Comma-separated camera ids hard-excluded from retrieval (ablation).",
+    ),
 ) -> None:
     """5-question end-to-end smoke test (issue #15)."""
     cfg = _resolve_config(config, False)
@@ -933,6 +938,11 @@ def smoke_test(
             max_questions=n,
             use_wandb=wandb,
             default_day=day,
+            exclude_cameras=(
+                [c.strip() for c in exclude_cameras.split(",") if c.strip()]
+                if exclude_cameras is not None
+                else None
+            ),
         )
     except (PipelineDependencyError, NotImplementedError, ValueError, KeyError) as exc:
         console.print(f"[red]{exc}[/red]")

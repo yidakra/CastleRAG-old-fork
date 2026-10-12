@@ -164,6 +164,8 @@ def run_question(
 
     if exclude_cameras:
         hints.exclude_cameras = tuple(exclude_cameras)
+    if hints.day is None and not hints.day_comparison and cfg.retrieval.default_day:
+        hints.day = cfg.retrieval.default_day
 
     try:
         retrieved = pipeline.retrieve(question, hints)
@@ -244,8 +246,12 @@ def run_eval(
     max_questions: Optional[int] = None,
     pipeline: Optional[EvalPipeline] = None,
     use_wandb: bool = False,
+    default_day: Optional[str] = None,
 ) -> EvalRunResult:
     """Run the full prediction loop and write output files.
+
+    ``default_day`` overrides ``retrieval.default_day`` from the config: every
+    question without an explicit day mention is retrieved from that day only.
 
     The runner writes rich predictions, evidence traces, official submission
     export, and metrics for every run. Accuracy is populated only when a
@@ -253,6 +259,8 @@ def run_eval(
     written to outputs.metrics.
     """
     cfg = load_config(override_path=config_path)
+    if default_day is not None:
+        cfg.retrieval.default_day = default_day
     selected = select_questions(
         questions,
         question_ids=question_ids,

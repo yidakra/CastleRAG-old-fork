@@ -88,6 +88,9 @@ retrieval:
   # (visual_text.json, built by `castlerag index`). top_k is the lane size;
   # route weights are its RRF weight in the multimodal fusion pass.
   visual_text_top_k: 20
+  # Pin retrieval to one day for questions that name none (day1..day4); null
+  # searches every indexed day. Set only for a single-day question set.
+  default_day: null
   visual_text_route_weights:
     static_visual: 2.0
     mixed: 1.5

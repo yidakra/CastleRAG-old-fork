@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from castlerag.config import CastleRAGConfig, load_config
+from castlerag.config import CastleRAGConfig, RetrievalConfig, load_config
 from castlerag.eval.run_eval import (
     EvalPipeline,
     IndexArtifactReport,
@@ -778,3 +778,82 @@ class TestBuildVllmChatClient:
         mock_openai_cls.assert_called_once_with(
             base_url="http://localhost:8000", api_key="not-needed"
         )
+
+
+# ---------------------------------------------------------------------------
+# retrieval.default_day
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultDay:
+    """``retrieval.default_day`` pins day-less questions; explicit hints win."""
+
+    def _pipeline_capturing(self, route_fn):
+        seen: Dict[str, RouteHints] = {}
+
+        def _retrieve(question: EvalQuestion, hints: RouteHints) -> List[RetrievalHit]:
+            seen[question.question_id] = hints
+            return [_make_hit(f"{question.question_id}_1")]
+
+        return (
+            EvalPipeline(
+                route=route_fn,
+                retrieve=_retrieve,
+                rerank=_default_rerank,
+                generate=_default_generate,
+            ),
+            seen,
+        )
+
+    def test_dayless_question_gets_default_day(self):
+        cfg = load_config()
+        cfg.retrieval.default_day = "day1"
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day == "day1"
+
+    def test_explicit_day_hint_is_kept(self):
+        cfg = load_config()
+        cfg.retrieval.default_day = "day1"
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text", day="day3")
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day == "day3"
+
+    def test_cross_day_question_stays_unpinned(self):
+        cfg = load_config()
+        cfg.retrieval.default_day = "day1"
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="temporal", day_comparison=True)
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day is None
+
+    def test_unset_leaves_hints_alone(self):
+        cfg = load_config()
+        assert cfg.retrieval.default_day is None
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day is None
+
+    def test_run_eval_default_day_overrides_config(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        run_eval(
+            _questions_dict(["q1"]),
+            out_dir=tmp_path,
+            pipeline=pipeline,
+            default_day="day2",
+        )
+        assert seen["q1"].day == "day2"
+
+    def test_invalid_default_day_rejected(self):
+        with pytest.raises(ValueError, match="default_day"):
+            RetrievalConfig(default_day="day5")
+

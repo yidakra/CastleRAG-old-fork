@@ -908,6 +908,11 @@ def smoke_test(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
     n: int = typer.Option(5, "--n", help="Number of questions to run (default 5)"),
     wandb: bool = typer.Option(False, "--wandb", help="Log run to Weights & Biases"),
+    day: Optional[str] = typer.Option(
+        None,
+        "--day",
+        help="Pin retrieval to this day (day1..day4) for questions that name none.",
+    ),
 ) -> None:
     """5-question end-to-end smoke test (issue #15)."""
     cfg = _resolve_config(config, False)
@@ -927,6 +932,7 @@ def smoke_test(
             out_dir=out_dir,
             max_questions=n,
             use_wandb=wandb,
+            default_day=day,
         )
     except (PipelineDependencyError, NotImplementedError, ValueError, KeyError) as exc:
         console.print(f"[red]{exc}[/red]")

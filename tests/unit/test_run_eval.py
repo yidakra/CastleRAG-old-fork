@@ -935,12 +935,16 @@ class TestExcludeCameras:
             return [_make_hit(f"{question.question_id}_1")]
 
         pipeline = EvalPipeline(
-            route=lambda q, a: RouteHints(route="speech_text", exclude_cameras=("Allie",)),
+            route=lambda q, a: RouteHints(
+                route="speech_text", exclude_cameras=("Allie",)
+            ),
             retrieve=_retrieve,
             rerank=_default_rerank,
             generate=_default_generate,
         )
-        run_question(pipeline, cfg, _make_question("q1"), exclude_cameras=["Allie", "Bao"])
+        run_question(
+            pipeline, cfg, _make_question("q1"), exclude_cameras=["Allie", "Bao"]
+        )
         assert seen["q1"].exclude_cameras == ("Allie", "Kitchen", "Bao")
 
     def test_run_eval_override_and_validation(self, tmp_path: Path):

@@ -162,7 +162,13 @@ def run_question(
     except Exception as exc:
         raise _stage_failure_error("routing", question.question_id, exc) from exc
 
-    excluded = tuple(dict.fromkeys([*cfg.retrieval.exclude_cameras, *exclude_cameras]))
+    # Router-provided, configured ("fixed"/"ego" expanded) and caller-provided
+    # exclusions all apply; order kept, duplicates dropped.
+    excluded = tuple(
+        dict.fromkeys(
+            [*hints.exclude_cameras, *_expand_camera_groups(cfg), *exclude_cameras]
+        )
+    )
     if excluded:
         hints.exclude_cameras = excluded
     if hints.day is None and not hints.day_comparison and cfg.retrieval.default_day:

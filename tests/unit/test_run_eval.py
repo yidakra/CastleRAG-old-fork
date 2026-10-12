@@ -918,6 +918,31 @@ class TestExcludeCameras:
         run_question(pipeline, cfg, _make_question("q1"))
         assert seen["q1"].exclude_cameras == ()
 
+    def test_direct_run_question_expands_fixed_keyword(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["fixed"]
+        pipeline, seen = self._pipeline_capturing()
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].exclude_cameras == tuple(cfg.dataset.exo_cameras)
+
+    def test_router_exclusions_are_preserved(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["Kitchen"]
+        seen: Dict[str, RouteHints] = {}
+
+        def _retrieve(question: EvalQuestion, hints: RouteHints) -> List[RetrievalHit]:
+            seen[question.question_id] = hints
+            return [_make_hit(f"{question.question_id}_1")]
+
+        pipeline = EvalPipeline(
+            route=lambda q, a: RouteHints(route="speech_text", exclude_cameras=("Allie",)),
+            retrieve=_retrieve,
+            rerank=_default_rerank,
+            generate=_default_generate,
+        )
+        run_question(pipeline, cfg, _make_question("q1"), exclude_cameras=["Allie", "Bao"])
+        assert seen["q1"].exclude_cameras == ("Allie", "Kitchen", "Bao")
+
     def test_run_eval_override_and_validation(self, tmp_path: Path):
         pipeline, seen = self._pipeline_capturing()
         run_eval(

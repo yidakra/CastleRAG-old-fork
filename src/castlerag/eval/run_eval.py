@@ -162,8 +162,17 @@ def run_question(
     except Exception as exc:
         raise _stage_failure_error("routing", question.question_id, exc) from exc
 
-    if exclude_cameras:
-        hints.exclude_cameras = tuple(exclude_cameras)
+    # Router-provided, configured ("fixed"/"ego" expanded) and caller-provided
+    # exclusions all apply; order kept, duplicates dropped.
+    excluded = tuple(
+        dict.fromkeys(
+            [*hints.exclude_cameras, *_expand_camera_groups(cfg), *exclude_cameras]
+        )
+    )
+    if excluded:
+        hints.exclude_cameras = excluded
+    if hints.day is None and not hints.day_comparison and cfg.retrieval.default_day:
+        hints.day = cfg.retrieval.default_day
 
     try:
         retrieved = pipeline.retrieve(question, hints)
@@ -244,8 +253,15 @@ def run_eval(
     max_questions: Optional[int] = None,
     pipeline: Optional[EvalPipeline] = None,
     use_wandb: bool = False,
+    default_day: Optional[str] = None,
+    exclude_cameras: Optional[Sequence[str]] = None,
 ) -> EvalRunResult:
     """Run the full prediction loop and write output files.
+
+    ``default_day`` overrides ``retrieval.default_day`` from the config: every
+    question without an explicit day mention is retrieved from that day only.
+    ``exclude_cameras`` overrides ``retrieval.exclude_cameras``: those camera
+    ids are hard-excluded from every retrieval lane. Unknown ids are rejected.
 
     The runner writes rich predictions, evidence traces, official submission
     export, and metrics for every run. Accuracy is populated only when a
@@ -253,6 +269,24 @@ def run_eval(
     written to outputs.metrics.
     """
     cfg = load_config(override_path=config_path)
+    if default_day is not None:
+        # Plain attribute assignment skips the field validator; rebuild the
+        # model so an invalid --day is rejected instead of reaching the filter.
+        cfg.retrieval = cfg.retrieval.model_validate(
+            {**cfg.retrieval.model_dump(), "default_day": default_day}
+        )
+    if exclude_cameras is not None:
+        cfg.retrieval = cfg.retrieval.model_validate(
+            {**cfg.retrieval.model_dump(), "exclude_cameras": list(exclude_cameras)}
+        )
+    cfg.retrieval.exclude_cameras = _expand_camera_groups(cfg)
+    known = set(cfg.dataset.ego_cameras) | set(cfg.dataset.exo_cameras)
+    unknown = sorted(set(cfg.retrieval.exclude_cameras) - known)
+    if unknown:
+        raise ValueError(
+            f"retrieval.exclude_cameras: unknown camera ids {unknown} "
+            f"(known: {sorted(known)})"
+        )
     selected = select_questions(
         questions,
         question_ids=question_ids,
@@ -387,6 +421,21 @@ def run_eval(
         n_graded=n_graded,
         support_split=support_split,
     )
+
+
+def _expand_camera_groups(cfg: CastleRAGConfig) -> List[str]:
+    """Expand the ``fixed`` / ``ego`` keywords in ``retrieval.exclude_cameras``.
+
+    ``fixed`` stands for every room camera (``dataset.exo_cameras``) and ``ego``
+    for every wearable one (``dataset.ego_cameras``), so an ego-only ablation
+    is ``--exclude-cameras fixed`` rather than a comma list that
+    ``sbatch --export`` would split apart. Order is kept, duplicates dropped.
+    """
+    groups = {"fixed": cfg.dataset.exo_cameras, "ego": cfg.dataset.ego_cameras}
+    expanded: List[str] = []
+    for cam in cfg.retrieval.exclude_cameras:
+        expanded.extend(groups.get(cam, [cam]))
+    return list(dict.fromkeys(expanded))
 
 
 def _resolve_output_paths(

@@ -908,6 +908,19 @@ def smoke_test(
     config: Optional[Path] = typer.Option(None, "--config", "-c"),
     n: int = typer.Option(5, "--n", help="Number of questions to run (default 5)"),
     wandb: bool = typer.Option(False, "--wandb", help="Log run to Weights & Biases"),
+    day: Optional[str] = typer.Option(
+        None,
+        "--day",
+        help="Pin retrieval to this day (day1..day4) for questions that name none.",
+    ),
+    exclude_cameras: Optional[str] = typer.Option(
+        None,
+        "--exclude-cameras",
+        help=(
+            "Camera ids hard-excluded from retrieval (ablation), separated by "
+            "commas or colons; 'fixed' = all room cameras, 'ego' = all wearables."
+        ),
+    ),
 ) -> None:
     """5-question end-to-end smoke test (issue #15)."""
     cfg = _resolve_config(config, False)
@@ -927,6 +940,16 @@ def smoke_test(
             out_dir=out_dir,
             max_questions=n,
             use_wandb=wandb,
+            default_day=day,
+            exclude_cameras=(
+                [
+                    c.strip()
+                    for c in exclude_cameras.replace(":", ",").split(",")
+                    if c.strip()
+                ]
+                if exclude_cameras is not None
+                else None
+            ),
         )
     except (PipelineDependencyError, NotImplementedError, ValueError, KeyError) as exc:
         console.print(f"[red]{exc}[/red]")

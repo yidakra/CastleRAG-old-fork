@@ -297,6 +297,9 @@ class RouteHints:
     has_visual_cue: bool = False
     has_speech_cue: bool = False
     has_temporal_cue: bool = False
+    # True for cross-day questions ("from the first to the third day"): day stays
+    # None on purpose and retrieval.default_day must not pin it either.
+    day_comparison: bool = False
     extracted_keywords: List[str] = field(default_factory=list)
     llm_key_entities: List[str] = field(default_factory=list)
     llm_focus_modalities: List[str] = field(default_factory=list)
@@ -398,6 +401,7 @@ def route_question(
         has_visual_cue=has_visual_cue,
         has_speech_cue=has_speech_cue,
         has_temporal_cue=has_temporal_cue,
+        day_comparison=day_comparison,
         extracted_keywords=extracted_keywords,
         llm_key_entities=llm_entities,
         llm_focus_modalities=llm_modalities,

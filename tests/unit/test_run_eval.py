@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from castlerag.config import CastleRAGConfig, load_config
+from castlerag.config import CastleRAGConfig, RetrievalConfig, load_config
 from castlerag.eval.run_eval import (
     EvalPipeline,
     IndexArtifactReport,
@@ -778,3 +778,200 @@ class TestBuildVllmChatClient:
         mock_openai_cls.assert_called_once_with(
             base_url="http://localhost:8000", api_key="not-needed"
         )
+
+
+# ---------------------------------------------------------------------------
+# retrieval.default_day
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultDay:
+    """``retrieval.default_day`` pins day-less questions; explicit hints win."""
+
+    def _pipeline_capturing(self, route_fn):
+        seen: Dict[str, RouteHints] = {}
+
+        def _retrieve(question: EvalQuestion, hints: RouteHints) -> List[RetrievalHit]:
+            seen[question.question_id] = hints
+            return [_make_hit(f"{question.question_id}_1")]
+
+        return (
+            EvalPipeline(
+                route=route_fn,
+                retrieve=_retrieve,
+                rerank=_default_rerank,
+                generate=_default_generate,
+            ),
+            seen,
+        )
+
+    def test_dayless_question_gets_default_day(self):
+        cfg = load_config()
+        cfg.retrieval.default_day = "day1"
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day == "day1"
+
+    def test_explicit_day_hint_is_kept(self):
+        cfg = load_config()
+        cfg.retrieval.default_day = "day1"
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text", day="day3")
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day == "day3"
+
+    def test_cross_day_question_stays_unpinned(self):
+        cfg = load_config()
+        cfg.retrieval.default_day = "day1"
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="temporal", day_comparison=True)
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day is None
+
+    def test_unset_leaves_hints_alone(self):
+        cfg = load_config()
+        assert cfg.retrieval.default_day is None
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].day is None
+
+    def test_run_eval_default_day_overrides_config(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        run_eval(
+            _questions_dict(["q1"]),
+            out_dir=tmp_path,
+            pipeline=pipeline,
+            default_day="day2",
+        )
+        assert seen["q1"].day == "day2"
+
+    def test_invalid_default_day_rejected(self):
+        with pytest.raises(ValueError, match="default_day"):
+            RetrievalConfig(default_day="day5")
+
+    def test_run_eval_rejects_invalid_default_day(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing(
+            lambda q, a: RouteHints(route="speech_text")
+        )
+        with pytest.raises(ValueError, match="default_day"):
+            run_eval(
+                _questions_dict(["q1"]),
+                out_dir=tmp_path,
+                pipeline=pipeline,
+                default_day="day9",
+            )
+        assert not seen
+
+
+# ---------------------------------------------------------------------------
+# retrieval.exclude_cameras
+# ---------------------------------------------------------------------------
+
+
+class TestExcludeCameras:
+    """``retrieval.exclude_cameras`` is merged into the hints' hard exclusion."""
+
+    def _pipeline_capturing(self):
+        seen: Dict[str, RouteHints] = {}
+
+        def _retrieve(question: EvalQuestion, hints: RouteHints) -> List[RetrievalHit]:
+            seen[question.question_id] = hints
+            return [_make_hit(f"{question.question_id}_1")]
+
+        return (
+            EvalPipeline(
+                route=lambda q, a: RouteHints(route="speech_text"),
+                retrieve=_retrieve,
+                rerank=_default_rerank,
+                generate=_default_generate,
+            ),
+            seen,
+        )
+
+    def test_config_exclusions_reach_hints(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["Kitchen", "Reading"]
+        pipeline, seen = self._pipeline_capturing()
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].exclude_cameras == ("Kitchen", "Reading")
+
+    def test_caller_exclusions_merge_without_duplicates(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["Kitchen"]
+        pipeline, seen = self._pipeline_capturing()
+        run_question(
+            pipeline, cfg, _make_question("q1"), exclude_cameras=["Allie", "Kitchen"]
+        )
+        assert seen["q1"].exclude_cameras == ("Kitchen", "Allie")
+
+    def test_unset_leaves_hints_alone(self):
+        cfg = load_config()
+        pipeline, seen = self._pipeline_capturing()
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].exclude_cameras == ()
+
+    def test_direct_run_question_expands_fixed_keyword(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["fixed"]
+        pipeline, seen = self._pipeline_capturing()
+        run_question(pipeline, cfg, _make_question("q1"))
+        assert seen["q1"].exclude_cameras == tuple(cfg.dataset.exo_cameras)
+
+    def test_router_exclusions_are_preserved(self):
+        cfg = load_config()
+        cfg.retrieval.exclude_cameras = ["Kitchen"]
+        seen: Dict[str, RouteHints] = {}
+
+        def _retrieve(question: EvalQuestion, hints: RouteHints) -> List[RetrievalHit]:
+            seen[question.question_id] = hints
+            return [_make_hit(f"{question.question_id}_1")]
+
+        pipeline = EvalPipeline(
+            route=lambda q, a: RouteHints(
+                route="speech_text", exclude_cameras=("Allie",)
+            ),
+            retrieve=_retrieve,
+            rerank=_default_rerank,
+            generate=_default_generate,
+        )
+        run_question(
+            pipeline, cfg, _make_question("q1"), exclude_cameras=["Allie", "Bao"]
+        )
+        assert seen["q1"].exclude_cameras == ("Allie", "Kitchen", "Bao")
+
+    def test_run_eval_override_and_validation(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing()
+        run_eval(
+            _questions_dict(["q1"]),
+            out_dir=tmp_path,
+            pipeline=pipeline,
+            exclude_cameras=["Kitchen"],
+        )
+        assert seen["q1"].exclude_cameras == ("Kitchen",)
+        with pytest.raises(ValueError, match="unknown camera ids"):
+            run_eval(
+                _questions_dict(["q2"]),
+                out_dir=tmp_path,
+                pipeline=pipeline,
+                exclude_cameras=["Kitchen", "Nobody"],
+            )
+
+    def test_fixed_keyword_expands_to_room_cameras(self, tmp_path: Path):
+        pipeline, seen = self._pipeline_capturing()
+        run_eval(
+            _questions_dict(["q1"]),
+            out_dir=tmp_path,
+            pipeline=pipeline,
+            exclude_cameras=["fixed", "Allie", "Kitchen"],
+        )
+        cfg = load_config()
+        assert seen["q1"].exclude_cameras == (*cfg.dataset.exo_cameras, "Allie")
+

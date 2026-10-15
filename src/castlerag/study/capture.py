@@ -805,6 +805,11 @@ def form_export_plan(
             warnings.append(
                 f"{slot} (task {number}) was captured offline; its answer is fabricated"
             )
+        if entry.get("footage_masked") is not True:
+            warnings.append(
+                f"{slot} (task {number}) was not captured with blurred footage; "
+                "do not put it in the participant form"
+            )
         names = {Path(str(s)).name for s in entry.get("screenshots") or []}
         for step in FORM_STEPS:
             if f"{step}_crop.png" in names:  # readable at the form's image width

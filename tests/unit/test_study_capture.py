@@ -338,6 +338,7 @@ def _form_manifest(mode="live"):
             "question": f"Q{n}?",
             "mode": mode,
             "answer_mentions_truth": right,
+            "footage_masked": True,
             "screenshots": shots,
             "displayed_cameras": [
                 {
@@ -440,3 +441,13 @@ def test_form_export_prefers_crops():
     plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
     assert ("task08_x/02_evidence_crop.png", "t1_02_evidence.png") in plan["copies"]
     assert ("task08_x/01_answer.png", "t1_01_answer.png") in plan["copies"]
+
+
+def test_export_warns_per_task_when_a_merged_task_is_unmasked():
+    m = _form_manifest()
+    m["tasks"][1]["footage_masked"] = False  # task 8, an earlier --show-footage run
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert any(
+        "t1 (task 8) was not captured with blurred footage" in w
+        for w in plan["warnings"]
+    )

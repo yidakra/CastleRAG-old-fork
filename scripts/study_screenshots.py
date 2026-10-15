@@ -434,7 +434,7 @@ def run_task(
     (task_dir / "thread.json").write_text(
         json.dumps(export, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    return cap.build_task_entry(
+    entry = cap.build_task_entry(
         task,
         export,
         mirror,
@@ -444,6 +444,8 @@ def run_task(
         verdicts=verdicts,
         converged=converged,
     )
+    entry["footage_masked"] = MASK_FOOTAGE  # per task: merged manifests keep it
+    return entry
 
 
 def offline_refusal(url: str) -> str:
@@ -554,7 +556,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         ui_url=args.url,
         mode=run_mode,
         created=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        footage_masked=not args.show_footage,
+        # True only if every task in the merged manifest was captured blurred.
+        footage_masked=all(e.get("footage_masked") is True for e in entries),
     )
     out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     log(f"wrote {out} ({len(entries)} tasks, mode={run_mode})")

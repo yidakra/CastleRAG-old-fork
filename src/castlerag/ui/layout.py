@@ -126,8 +126,11 @@ def _top_bar(mode: str, cfg: Optional[object] = None) -> dmc.Group:
                 children=[
                     dmc.Badge(day_label, variant="light", color="gray"),
                     dmc.Badge(cam_label, variant="light", color="gray"),
+                    # Stable id: the user-study capture tool reads this to
+                    # refuse fabricated (offline) answers.
                     dmc.Badge(
                         "live RAG" if live else "offline",
+                        id="mode-badge",
                         variant="light" if live else "outline",
                         color="teal" if live else "gray",
                     ),

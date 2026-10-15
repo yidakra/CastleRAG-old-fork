@@ -24,7 +24,7 @@ import dash_mantine_components as dmc
 from dash import ALL, Input, Output, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 
-from castlerag.ui.chat import ChatEngine, ChatTurnResult
+from castlerag.ui.chat import CITE_MARKER_RE, ChatEngine, ChatTurnResult
 from castlerag.ui.figures import (
     camera_match_figure,
     empty_figure,
@@ -60,7 +60,7 @@ _REVIEW_STATE_DISPLAY = {
 _INTERNAL_LINK_RE = re.compile(r"\[([^\]]+)\]\((?!https?://)([^)]*)\)")
 # Inline evidence citation the placeholder/engine answer embeds:
 # [[cite:{moment_id}:{camera_id}:{label}]] — rendered as a clickable link.
-_CITE_MARKER_RE = re.compile(r"\[\[cite:([^:\]]+):([^:\]]+):([^\]]*)\]\]")
+_CITE_MARKER_RE = CITE_MARKER_RE
 # Minimal inline markdown the answer prose uses (only **bold**).
 _BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
 
@@ -1016,18 +1016,27 @@ def register_callbacks(
                 "question": g.get("question"),
                 "refined_query": g.get("refined_query"),
                 "answer": g.get("answer_text"),
+                "claim": g.get("claim"),
                 "reviews": g.get("reviews", {}),
+                "sent_refined_query": g.get("sent_refined_query"),
                 "moments": [
                     {
                         "moment_id": m.get("moment_id"),
                         "clock_label": m.get("clock_label"),
                         "place_label": m.get("place_label"),
+                        "aggregate_score": m.get("aggregate_score"),
+                        "absolute_start_ms": m.get("absolute_start_ms"),
                         "cameras": [
                             {
                                 "camera_id": c.get("camera_id"),
+                                "day": c.get("day"),
+                                "hour": c.get("hour"),
+                                "start_seconds": c.get("start_seconds"),
                                 "match_score": c.get("match_score"),
                                 "is_best": c.get("is_best"),
+                                "is_context": c.get("is_context", False),
                                 "evidence_text": c.get("evidence_text"),
+                                "watch_url": c.get("watch_url"),
                             }
                             for c in (m.get("cameras") or [])
                         ],

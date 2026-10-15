@@ -66,6 +66,11 @@ _PLACES = ("Doorway", "Hallway", "Kitchen", "Living room", "Stairwell", "Reading
 _MOMENT_MINUTES = (29, 31, 44, 52)
 
 
+# Parses the markers :func:`cite_marker` emits: groups are (moment_id,
+# camera_id, label). Shared by the UI renderer and the user-study capture tool.
+CITE_MARKER_RE = re.compile(r"\[\[cite:([^:\]]+):([^:\]]+):([^\]]*)\]\]")
+
+
 def cite_marker(moment_id: str, camera_id: str, label: str) -> str:
     """Return an inline evidence-citation marker for an answer string.
 

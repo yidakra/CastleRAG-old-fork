@@ -49,6 +49,11 @@ ui = [
     "dash-mantine-components>=2.0",
     "plotly>=5.20",
 ]
+# User-study screenshot capture (scripts/study_screenshots.py); after install
+# run `python -m playwright install chromium`.
+study = [
+    "playwright>=1.40",
+]
 # Experiment tracking (optional — gracefully skipped when not installed)
 tracking = [
     "wandb>=0.17",

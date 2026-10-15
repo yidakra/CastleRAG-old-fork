@@ -40,6 +40,7 @@ CANDIDATE_QUESTIONS: Tuple[str, ...] = (
     "What was for lunch on the first day?",
     "Who won the first round of UNO?",
     "What game did Bjorn suggest to play with the cameras?",
+    "Who brought the coffee pot to the table for breakfast on the first day?",
 )
 
 # ---------------------------------------------------------------------------
@@ -106,9 +107,7 @@ def review_button_selector(camera_id: str, action: str) -> str:
     """Selector for one camera's Confirm/Refine/Ignore button."""
     if action not in VERDICT_ACTIONS:
         raise ValueError(f"unknown verdict action {action!r}")
-    return dash_id_selector(
-        {"type": "review-btn", "cam": camera_id, "action": action}
-    )
+    return dash_id_selector({"type": "review-btn", "cam": camera_id, "action": action})
 
 
 def review_just_selector(camera_id: str) -> str:
@@ -177,9 +176,7 @@ def match_questions(
             missing.append(question)
             continue
         truth = (row.get("Answer") or "").strip()
-        distractors = [
-            (row.get(f"Distractor {i}") or "").strip() for i in (1, 2, 3)
-        ]
+        distractors = [(row.get(f"Distractor {i}") or "").strip() for i in (1, 2, 3)]
         tasks.append(
             StudyTask(
                 number=number,
@@ -234,9 +231,7 @@ def parse_task_selection(spec: Optional[str], n_tasks: int) -> List[int]:
 def slugify(text: str, max_len: int = 40) -> str:
     """Filesystem-safe ASCII slug of ``text`` (``"When did Cathal want rösti?"``
     -> ``"when-did-cathal-want-rosti"``)."""
-    ascii_text = (
-        unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    )
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
     if len(slug) > max_len:
         slug = slug[:max_len].rsplit("-", 1)[0] or slug[:max_len]
@@ -313,11 +308,27 @@ def resolve_verdicts(
 # ---------------------------------------------------------------------------
 
 _NUMBER_WORDS = {
-    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
-    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
-    "ten": "10", "eleven": "11", "twelve": "12", "thirteen": "13",
-    "fourteen": "14", "fifteen": "15", "sixteen": "16", "seventeen": "17",
-    "eighteen": "18", "nineteen": "19", "twenty": "20",
+    "zero": "0",
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+    "ten": "10",
+    "eleven": "11",
+    "twelve": "12",
+    "thirteen": "13",
+    "fourteen": "14",
+    "fifteen": "15",
+    "sixteen": "16",
+    "seventeen": "17",
+    "eighteen": "18",
+    "nineteen": "19",
+    "twenty": "20",
 }
 _MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 
@@ -654,8 +665,12 @@ def annotate_image(
         draw.rectangle(co.rect, outline=color, width=stroke)
         cx, cy = co.badge_center
         r = co.badge_radius
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=color, outline="white",
-                     width=max(2, stroke // 2))
+        draw.ellipse(
+            (cx - r, cy - r, cx + r, cy + r),
+            fill=color,
+            outline="white",
+            width=max(2, stroke // 2),
+        )
         font_size = int(r * 1.3)
         try:
             font = ImageFont.load_default(size=font_size)
@@ -664,3 +679,117 @@ def annotate_image(
         draw.text((cx, cy), str(co.number), fill="white", font=font, anchor="mm")
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
     image.save(dst)
+
+
+# ---------------------------------------------------------------------------
+# Export for the Google Form (scripts/study_form.gs)
+# ---------------------------------------------------------------------------
+
+FORM_SLOTS: Tuple[str, ...] = ("practice", "t1", "t2", "t3", "t4")
+# What each slot must show, per the study's selection rule. Used only to warn.
+FORM_SLOT_SHOULD_BE_RIGHT: Dict[str, bool] = {
+    "practice": True,
+    "t1": True,
+    "t2": True,
+    "t3": True,
+    "t4": False,
+}
+FORM_STEPS: Tuple[str, ...] = ("01_answer", "02_evidence", "03_review", "04_refined")
+
+
+def parse_slots(spec: str) -> Dict[str, int]:
+    """``"practice=3,t1=8,t2=9,t3=7,t4=4"`` -> ``{"practice": 3, ...}``.
+
+    Every form slot must be assigned exactly once, to a distinct task.
+    """
+    slots: Dict[str, int] = {}
+    for part in (spec or "").split(","):
+        if not part.strip():
+            continue
+        name, sep, value = part.partition("=")
+        name = name.strip()
+        if not sep or name not in FORM_SLOTS:
+            raise ValueError(
+                f"bad slot {part!r}; expected one of {FORM_SLOTS} as name=task"
+            )
+        if name in slots:
+            raise ValueError(f"slot {name!r} assigned twice")
+        slots[name] = int(value)
+    missing = [s for s in FORM_SLOTS if s not in slots]
+    if missing:
+        raise ValueError(f"missing slots: {missing}")
+    if len(set(slots.values())) != len(slots):
+        raise ValueError("each slot needs a different task")
+    return slots
+
+
+def form_export_plan(
+    manifest: Mapping[str, Any], slots: Mapping[str, int]
+) -> Dict[str, Any]:
+    """Work out what to copy for the Google Form and what to paste into it.
+
+    Returns ``copies`` (``(source relative to the capture dir, form file
+    name)``), ``tasks`` and ``footage`` (slot -> question / camera -> URL, the
+    ``TASKS`` and ``FOOTAGE`` constants of ``scripts/study_form.gs``) and
+    ``warnings`` (offline captures, missing steps, missing footage links, and
+    answers that don't fit their slot by the ``answer_mentions_truth``
+    heuristic). Raises ``KeyError`` for a slot whose task isn't in the manifest.
+    """
+    by_task = {int(e["task"]): e for e in manifest.get("tasks", [])}
+    copies: List[Tuple[str, str]] = []
+    tasks: Dict[str, Dict[str, str]] = {}
+    footage: Dict[str, Dict[str, str]] = {}
+    warnings: List[str] = []
+    orientation: Optional[str] = None
+    for task_entry in by_task.values():
+        for shot in task_entry.get("screenshots") or []:
+            if Path(str(shot)).name == "00_orientation.png" and orientation is None:
+                orientation = str(Path(str(task_entry["dir"])) / "00_orientation.png")
+    if orientation:
+        copies.append((orientation, "orientation.png"))
+    else:
+        warnings.append(
+            "no 00_orientation.png in the manifest; rerun with --orientation"
+        )
+
+    for slot in FORM_SLOTS:
+        number = int(slots[slot])
+        if number not in by_task:
+            raise KeyError(f"slot {slot}: task {number} is not in the manifest")
+        entry = by_task[number]
+        tasks[slot] = {"question": str(entry["question"])}
+        if entry.get("mode") != "live":
+            warnings.append(
+                f"{slot} (task {number}) was captured offline; its answer is fabricated"
+            )
+        names = {Path(str(s)).name for s in entry.get("screenshots") or []}
+        for step in FORM_STEPS:
+            if f"{step}.png" in names:
+                copies.append(
+                    (str(Path(str(entry["dir"])) / f"{step}.png"), f"{slot}_{step}.png")
+                )
+            else:
+                warnings.append(f"{slot} (task {number}) has no {step}.png")
+        links = {
+            str(c["camera_id"]): str(c["watch_url"])
+            for c in entry.get("displayed_cameras") or []
+            if c.get("watch_url") and not c.get("is_context")
+        }
+        if not links:
+            warnings.append(f"{slot} (task {number}) has no footage links")
+        footage[slot] = links
+        right = entry.get("answer_mentions_truth")
+        if right is not None and bool(right) != FORM_SLOT_SHOULD_BE_RIGHT[slot]:
+            want = "right" if FORM_SLOT_SHOULD_BE_RIGHT[slot] else "wrong"
+            warnings.append(
+                f"{slot} (task {number}) should be {want} but "
+                f"answer_mentions_truth={right}; check by hand"
+            )
+    return {"copies": copies, "tasks": tasks, "footage": footage, "warnings": warnings}
+
+
+def form_constants_js(plan: Mapping[str, Any]) -> str:
+    """The ``TASKS`` and ``FOOTAGE`` constants for ``scripts/study_form.gs``."""
+    tasks = json.dumps(plan["tasks"], indent=2, ensure_ascii=False)
+    footage = json.dumps(plan["footage"], indent=2, ensure_ascii=False)
+    return f"const TASKS = {tasks};\n\nconst FOOTAGE = {footage};\n"

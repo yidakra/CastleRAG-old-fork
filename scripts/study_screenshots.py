@@ -10,7 +10,7 @@ the node name in ``logs/castle-ui-live_<jobid>.out``. Forward it with:
 then run (default ``--url`` is http://localhost:8050/):
 
     pip install -e ".[study]" && python -m playwright install chromium
-    python scripts/study_screenshots.py                  # all 8 candidate tasks
+    python scripts/study_screenshots.py                  # all 9 candidate tasks
     python scripts/study_screenshots.py --tasks 1,3-4 --annotate
 
 If the job runs with ``PUBLIC_TUNNEL=1`` the app enforces basic auth; export
@@ -74,7 +74,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                     help="dashboard URL (default: %(default)s, the ui_live.slurm port)")
     ap.add_argument("--questions", default=None,
                     help="file with one question per line, or '|'-separated "
-                         "questions (default: the 8 study candidates)")
+                         "questions (default: the 9 study candidates)")
     ap.add_argument("--tasks", default="all",
                     help="task numbers to run, e.g. '1,3-5' (default: all)")
     ap.add_argument("--orientation", type=int, default=1,

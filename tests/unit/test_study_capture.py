@@ -21,31 +21,60 @@ def mirror() -> YouTubeMirror:
 
 def _export() -> dict:
     cams = [
-        {"camera_id": "Bjorn", "day": "day1", "hour": 12, "start_seconds": 1745.0,
-         "match_score": 0.61, "is_best": False, "is_context": False},
-        {"camera_id": "Luca", "day": "day1", "hour": 12, "start_seconds": 1745.0,
-         "match_score": 0.74, "is_best": True, "is_context": False},
-        {"camera_id": "Klaus", "day": "day1", "hour": 12, "start_seconds": 1745.0,
-         "match_score": 0.0, "is_best": False, "is_context": True},
+        {
+            "camera_id": "Bjorn",
+            "day": "day1",
+            "hour": 12,
+            "start_seconds": 1745.0,
+            "match_score": 0.61,
+            "is_best": False,
+            "is_context": False,
+        },
+        {
+            "camera_id": "Luca",
+            "day": "day1",
+            "hour": 12,
+            "start_seconds": 1745.0,
+            "match_score": 0.74,
+            "is_best": True,
+            "is_context": False,
+        },
+        {
+            "camera_id": "Klaus",
+            "day": "day1",
+            "hour": 12,
+            "start_seconds": 1745.0,
+            "match_score": 0.0,
+            "is_best": False,
+            "is_context": True,
+        },
     ]
     return {
         "turns": [
             {
-                "group_id": "g1", "iteration": 1, "is_refinement": False,
+                "group_id": "g1",
+                "iteration": 1,
+                "is_refinement": False,
                 "question": "What brand is the fridge in the kitchen?",
                 "refined_query": None,
-                "answer": "It is a **Samsung** fridge "
-                          "[[cite:m0:Bjorn:12:29]].",
+                "answer": "It is a **Samsung** fridge [[cite:m0:Bjorn:12:29]].",
                 "claim": {"text": "Samsung", "support": "partial"},
                 "reviews": {},
                 "moments": [
-                    {"moment_id": "g1-m0", "clock_label": "12:29",
-                     "place_label": "Kitchen", "cameras": cams},
+                    {
+                        "moment_id": "g1-m0",
+                        "clock_label": "12:29",
+                        "place_label": "Kitchen",
+                        "cameras": cams,
+                    },
                 ],
             },
             {
-                "group_id": "g2", "iteration": 2, "is_refinement": True,
-                "question": "Re-examine", "refined_query": "Re-examine",
+                "group_id": "g2",
+                "iteration": 2,
+                "is_refinement": True,
+                "question": "Re-examine",
+                "refined_query": "Re-examine",
                 "answer": "Still four.",
                 "claim": {"text": "Samsung", "support": "supported"},
                 "moments": [],
@@ -55,13 +84,13 @@ def _export() -> dict:
 
 
 def test_all_candidates_match_csv():
-    tasks = cap.match_questions(
-        cap.CANDIDATE_QUESTIONS, cap.load_ground_truth(CSV)
-    )
-    assert [t.number for t in tasks] == list(range(1, 9))
+    tasks = cap.match_questions(cap.CANDIDATE_QUESTIONS, cap.load_ground_truth(CSV))
+    assert [t.number for t in tasks] == list(range(1, 10))
     truths = {t.question: t.truth for t in tasks}
     assert truths["What brand is the fridge in the kitchen?"] == "Samsung"
     assert truths["When did Cathal want rösti?"] == "Thursday"
+    coffee = "Who brought the coffee pot to the table for breakfast on the first day?"
+    assert truths[coffee] == "Werner"
     assert tasks[0].choices[0] == "Samsung" and len(tasks[0].choices) == 4
 
 
@@ -102,11 +131,15 @@ def test_resolve_verdicts_default_and_plan():
     cams = _export()["turns"][0]["moments"][0]["cameras"]
     assert cap.top_camera(cams) == "Luca"
     assert cap.resolve_verdicts(cams) == {
-        "Bjorn": "refine", "Luca": "confirm", "Klaus": "refine"
+        "Bjorn": "refine",
+        "Luca": "confirm",
+        "Klaus": "refine",
     }
     plan = {"others": "ignore", "Klaus": "refine"}
     assert cap.resolve_verdicts(cams, plan) == {
-        "Bjorn": "ignore", "Luca": "confirm", "Klaus": "refine"
+        "Bjorn": "ignore",
+        "Luca": "confirm",
+        "Klaus": "refine",
     }
 
 
@@ -166,8 +199,13 @@ def test_plain_answer_text_renders_citations():
 def test_build_task_entry(mirror: YouTubeMirror):
     task = cap.StudyTask(1, "What brand is the fridge in the kitchen?", "Samsung")
     entry = cap.build_task_entry(
-        task, _export(), mirror, mode="live", task_dir=task.dir_name,
-        screenshots=["01_answer.png"], verdicts={"Luca": "confirm"},
+        task,
+        _export(),
+        mirror,
+        mode="live",
+        task_dir=task.dir_name,
+        screenshots=["01_answer.png"],
+        verdicts={"Luca": "confirm"},
     )
     assert entry["answer_text"] == "It is a Samsung fridge Bjorn 12:29."
     assert entry["claim"] == "Samsung" and entry["support"] == "partial"
@@ -191,9 +229,10 @@ def test_build_task_entry(mirror: YouTubeMirror):
 def test_build_manifest_flags_offline():
     m = cap.build_manifest([], ui_url="u", mode="offline", created="t")
     assert "FABRICATED" in m["note"]
-    assert "FABRICATED" not in cap.build_manifest(
-        [], ui_url="u", mode="live", created="t"
-    )["note"]
+    assert (
+        "FABRICATED"
+        not in cap.build_manifest([], ui_url="u", mode="live", created="t")["note"]
+    )
 
 
 def test_merge_entries():
@@ -201,9 +240,7 @@ def test_merge_entries():
         [{"task": 1, "v": "old"}, {"task": 3, "v": "old"}],
         [{"task": 1, "v": "new"}, {"task": 2, "v": "new"}],
     )
-    assert [(e["task"], e["v"]) for e in merged] == [
-        (1, "new"), (2, "new"), (3, "old")
-    ]
+    assert [(e["task"], e["v"]) for e in merged] == [(1, "new"), (2, "new"), (3, "old")]
     # Task 3 was re-run but failed: its stale entry must not survive.
     rerun = cap.merge_entries(
         [{"task": 1, "v": "old"}, {"task": 3, "v": "old"}],
@@ -283,3 +320,93 @@ def test_mode_badge_text_matches_live_check():
 
     assert cap.is_live_badge(find(_top_bar("live")).children)
     assert not cap.is_live_badge(find(_top_bar("offline")).children)
+
+
+# ---------------------------------------------------------------------------
+# Google Form export
+# ---------------------------------------------------------------------------
+
+
+def _form_manifest(mode="live"):
+    def entry(n, right, orientation=False):
+        shots = [f"task{n:02d}_x/{s}.png" for s in cap.FORM_STEPS]
+        if orientation:
+            shots.insert(0, f"task{n:02d}_x/00_orientation.png")
+        return {
+            "task": n,
+            "dir": f"task{n:02d}_x",
+            "question": f"Q{n}?",
+            "mode": mode,
+            "answer_mentions_truth": right,
+            "screenshots": shots,
+            "displayed_cameras": [
+                {
+                    "camera_id": "Allie",
+                    "watch_url": f"https://y/{n}a",
+                    "is_context": False,
+                },
+                {"camera_id": "Luca", "watch_url": None, "is_context": False},
+                {
+                    "camera_id": "Bjorn",
+                    "watch_url": f"https://y/{n}c",
+                    "is_context": True,
+                },
+            ],
+        }
+
+    return {
+        "tasks": [
+            entry(3, True, orientation=True),
+            entry(8, True),
+            entry(9, True),
+            entry(7, True),
+            entry(4, False),
+        ]
+    }
+
+
+def test_parse_slots_requires_every_slot_once():
+    assert cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4")["t4"] == 4
+    with pytest.raises(ValueError, match="missing"):
+        cap.parse_slots("practice=3,t1=8")
+    with pytest.raises(ValueError, match="different task"):
+        cap.parse_slots("practice=3,t1=3,t2=9,t3=7,t4=4")
+    with pytest.raises(ValueError, match="bad slot"):
+        cap.parse_slots("t9=1")
+
+
+def test_form_export_plan_names_files_and_links():
+    plan = cap.form_export_plan(
+        _form_manifest(), cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4")
+    )
+    dsts = [d for _, d in plan["copies"]]
+    assert (
+        dsts[0] == "orientation.png"
+        and ("task03_x/00_orientation.png", "orientation.png") in plan["copies"]
+    )
+    assert "t4_04_refined.png" in dsts and len(dsts) == 1 + 5 * 4
+    assert plan["footage"]["t1"] == {
+        "Allie": "https://y/8a"
+    }  # no null URL, no context camera
+    assert plan["tasks"]["t4"] == {"question": "Q4?"}
+    assert plan["warnings"] == []
+
+
+def test_form_export_plan_warns_on_offline_and_wrong_fit():
+    m = _form_manifest(mode="offline")
+    m["tasks"][4]["answer_mentions_truth"] = (
+        True  # task 4 fills t4, which must be wrong
+    )
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert any("captured offline" in w for w in plan["warnings"])
+    assert any("t4 (task 4) should be wrong" in w for w in plan["warnings"])
+    with pytest.raises(KeyError):
+        cap.form_export_plan(m, cap.parse_slots("practice=1,t1=8,t2=9,t3=7,t4=4"))
+
+
+def test_form_constants_js_is_valid_object_literals():
+    plan = cap.form_export_plan(
+        _form_manifest(), cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4")
+    )
+    js = cap.form_constants_js(plan)
+    assert js.startswith("const TASKS = {") and "const FOOTAGE = {" in js

@@ -281,7 +281,7 @@ function applyCapture(formId) {
     if (!slot) return;
     const h = pb.getHelpText();
     if (h.includes('Question asked: ')) {
-      pb.setHelpText(h.replace(/Question asked: .*$/s, 'Question asked: ' + TASKS[slot].question));
+      pb.setHelpText(h.replace(/Question asked: .*$/s, () => 'Question asked: ' + TASKS[slot].question));
       pagesSet++;
     } else if (h.startsWith('Here is the footage the answer relies on.')) {
       pb.setHelpText('Here is the footage the answer relies on. ' + footageText_(slot));

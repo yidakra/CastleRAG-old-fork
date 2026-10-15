@@ -453,9 +453,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 log(f"  ERROR task {task.number}: {exc}")
                 err = args.out / task.dir_name / "error.png"
                 try:
-                    page.screenshot(path=str(err))
-                except Exception:
-                    pass
+                    shoot(page, err)  # same footage check as every other screenshot
+                except Exception as shot_exc:
+                    log(f"  no error.png for task {task.number}: {shot_exc}")
                 continue
             entries.append(entry)
             log(

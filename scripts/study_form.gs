@@ -243,3 +243,50 @@ function checkRouting(formId) {
   out.push('items: ' + form.getItems().length);
   Logger.log(out.join('\n'));
 }
+
+/**
+ * Fills a form built by buildForm() with the capture results, in place, so
+ * its links stay the same: every "[screenshot: name]" placeholder whose file
+ * is in SCREENSHOT_FOLDER_ID becomes an image, and each task's question and
+ * footage links are rewritten from TASKS and FOOTAGE (slots are found from
+ * the [practice]/[A-t1]/[B-t3] tags on the task items).
+ */
+function applyCapture(formId) {
+  const form = FormApp.openById(formId);
+  const images = loadImages_();
+  let swapped = 0, missing = [];
+  // Placeholders, last first so earlier indexes stay valid.
+  form.getItems(FormApp.ItemType.SECTION_HEADER).reverse().forEach(it => {
+    const m = /^\[screenshot: (.+)\]$/.exec(it.getTitle());
+    if (!m) return;
+    const blob = images[m[1]];
+    if (!blob) { missing.push(m[1]); return; }
+    const idx = it.getIndex();
+    const img = form.addImageItem().setImage(blob).setTitle(it.asSectionHeaderItem().getHelpText());
+    form.moveItem(img.getIndex(), idx);
+    form.deleteItem(idx + 1);
+    swapped++;
+  });
+  // Task pages: each page takes the slot of the first tagged item after it.
+  const items = form.getItems();
+  const pages = [];
+  items.forEach(it => {
+    if (it.getType() === FormApp.ItemType.PAGE_BREAK) { pages.push({ pb: it.asPageBreakItem(), slot: null }); return; }
+    const m = /^\[(?:[AB]-)?(practice|t[1-4])\] /.exec(it.getTitle());
+    const page = pages[pages.length - 1];
+    if (m && page && !page.slot) page.slot = m[1];
+  });
+  let pagesSet = 0;
+  pages.forEach(({ pb, slot }) => {
+    if (!slot) return;
+    const h = pb.getHelpText();
+    if (h.includes('Question asked: ')) {
+      pb.setHelpText(h.replace(/Question asked: .*$/s, 'Question asked: ' + TASKS[slot].question));
+      pagesSet++;
+    } else if (h.startsWith('Here is the footage the answer relies on.')) {
+      pb.setHelpText('Here is the footage the answer relies on. ' + footageText_(slot));
+      pagesSet++;
+    }
+  });
+  Logger.log(`images placed: ${swapped}; still missing: ${missing.length ? missing.join(', ') : 'none'}; task pages updated: ${pagesSet}`);
+}

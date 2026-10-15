@@ -48,6 +48,36 @@ CANDIDATE_QUESTIONS: Tuple[str, ...] = (
 # tests/unit/test_study_capture.py checks the plain ids against build_layout().
 # ---------------------------------------------------------------------------
 
+# Dataset footage must not leave the team (CASTLE terms of use: no
+# distribution of the data or derivatives), so study screenshots blur every
+# embedded video and participants watch it through the public YouTube links.
+SEL_FOOTAGE = "#camera-grid iframe.camera-frame"
+FOOTAGE_MASK_CSS = (
+    "#camera-grid iframe.camera-frame {"
+    " filter: blur(28px) brightness(0.85) !important; pointer-events: none; }"
+    " #camera-grid .camera-tile .mantine-AspectRatio-root { position: relative; }"
+    " #camera-grid .camera-tile .mantine-AspectRatio-root::after {"
+    " content: 'Footage via link'; position: absolute; inset: 0; display: flex;"
+    " align-items: center; justify-content: center; color: #fff;"
+    " font: 600 13px system-ui, sans-serif; text-shadow: 0 1px 3px #000; }"
+)
+FOOTAGE_MASK_INIT_JS = (
+    "(() => { const css = %s; const add = () => {"
+    " if (document.getElementById('study-footage-mask')) return;"
+    " const s = document.createElement('style'); s.id = 'study-footage-mask';"
+    " s.textContent = css; document.head.appendChild(s); };"
+    " if (document.head) add();"
+    " else document.addEventListener('DOMContentLoaded', add);"
+    " })();" % json.dumps(FOOTAGE_MASK_CSS)
+)
+# Returns the number of visible footage frames that are NOT blurred.
+FOOTAGE_UNMASKED_JS = (
+    "() => Array.from(document.querySelectorAll(%s)).filter(f => {"
+    " const r = f.getBoundingClientRect(); if (!r.width || !r.height) return false;"
+    " return !getComputedStyle(f).filter.includes('blur'); }).length"
+    % json.dumps(SEL_FOOTAGE)
+)
+
 SEL_MODE_BADGE = "#mode-badge"  # top-bar "live RAG" / "offline" badge
 SEL_QUESTION_INPUT = "#new-question-input"
 SEL_ASK_BUTTON = "#ask-new-button"
@@ -556,11 +586,17 @@ def merge_entries(
 
 
 def build_manifest(
-    entries: Sequence[Mapping[str, Any]], *, ui_url: str, mode: str, created: str
+    entries: Sequence[Mapping[str, Any]],
+    *,
+    ui_url: str,
+    mode: str,
+    created: str,
+    footage_masked: bool = True,
 ) -> Dict[str, Any]:
     """Wrap per-task entries with run metadata."""
     return {
         "created": created,
+        "footage_masked": footage_masked,
         "ui_url": ui_url,
         "mode": mode,
         "note": (
@@ -736,10 +772,17 @@ def form_export_plan(
     heuristic). Raises ``KeyError`` for a slot whose task isn't in the manifest.
     """
     by_task = {int(e["task"]): e for e in manifest.get("tasks", [])}
+    if not manifest.get("footage_masked"):
+        warnings_pre = [
+            "screenshots show unblurred dataset footage (captured with "
+            "--show-footage); do not put them in the participant form"
+        ]
+    else:
+        warnings_pre = []
     copies: List[Tuple[str, str]] = []
     tasks: Dict[str, Dict[str, str]] = {}
     footage: Dict[str, Dict[str, str]] = {}
-    warnings: List[str] = []
+    warnings: List[str] = list(warnings_pre)
     orientation: Optional[str] = None
     for task_entry in by_task.values():
         for shot in task_entry.get("screenshots") or []:

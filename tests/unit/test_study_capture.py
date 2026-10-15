@@ -355,13 +355,14 @@ def _form_manifest(mode="live"):
         }
 
     return {
+        "footage_masked": True,
         "tasks": [
             entry(3, True, orientation=True),
             entry(8, True),
             entry(9, True),
             entry(7, True),
             entry(4, False),
-        ]
+        ],
     }
 
 
@@ -410,3 +411,24 @@ def test_form_constants_js_is_valid_object_literals():
     )
     js = cap.form_constants_js(plan)
     assert js.startswith("const TASKS = {") and "const FOOTAGE = {" in js
+
+
+def test_footage_mask_targets_the_camera_iframes():
+    assert (
+        "iframe.camera-frame" in cap.FOOTAGE_MASK_CSS
+        and "blur(" in cap.FOOTAGE_MASK_CSS
+    )
+    assert "study-footage-mask" in cap.FOOTAGE_MASK_INIT_JS
+    assert cap.SEL_FOOTAGE in cap.FOOTAGE_UNMASKED_JS
+
+
+def test_camera_frame_class_matches_ui():
+    src = Path(cap.__file__).parents[1].joinpath("ui", "callbacks.py").read_text()
+    assert 'className="camera-frame"' in src
+
+
+def test_export_warns_when_footage_not_masked():
+    m = _form_manifest()
+    m["footage_masked"] = False
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert any("unblurred dataset footage" in w for w in plan["warnings"])

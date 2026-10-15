@@ -70,32 +70,74 @@ def log(msg: str) -> None:
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--url", default=cap.DEFAULT_UI_URL,
-                    help="dashboard URL (default: %(default)s, the ui_live.slurm port)")
-    ap.add_argument("--questions", default=None,
-                    help="file with one question per line, or '|'-separated "
-                         "questions (default: the 9 study candidates)")
-    ap.add_argument("--tasks", default="all",
-                    help="task numbers to run, e.g. '1,3-5' (default: all)")
-    ap.add_argument("--orientation", type=int, default=1,
-                    help="task number that also gets 00_orientation.png "
-                         "(0 disables; default: %(default)s)")
-    ap.add_argument("--annotate", action="store_true",
-                    help="draw numbered callouts on 00_orientation.png")
-    ap.add_argument("--plan", type=Path, default=None,
-                    help="JSON verdict plan keyed by task number")
-    ap.add_argument("--csv", type=Path, default=cap.DEFAULT_CSV,
-                    help="ground-truth CSV (default: %(default)s)")
-    ap.add_argument("--out", type=Path, default=cap.DEFAULT_OUT_DIR,
-                    help="output root (default: %(default)s)")
-    ap.add_argument("--answer-timeout", type=float, default=600.0,
-                    help="seconds to wait for an answer/refine (default: %(default)s)")
-    ap.add_argument("--step-timeout", type=float, default=180.0,
-                    help="seconds to wait for a verdict draft / submit "
-                         "(default: %(default)s)")
-    ap.add_argument("--allow-offline", action="store_true",
-                    help="proceed even if the UI is in offline (fabricated) mode")
+    ap.add_argument(
+        "--url",
+        default=cap.DEFAULT_UI_URL,
+        help="dashboard URL (default: %(default)s, the ui_live.slurm port)",
+    )
+    ap.add_argument(
+        "--questions",
+        default=None,
+        help="file with one question per line, or '|'-separated "
+        "questions (default: the 9 study candidates)",
+    )
+    ap.add_argument(
+        "--tasks",
+        default="all",
+        help="task numbers to run, e.g. '1,3-5' (default: all)",
+    )
+    ap.add_argument(
+        "--orientation",
+        type=int,
+        default=1,
+        help="task number that also gets 00_orientation.png "
+        "(0 disables; default: %(default)s)",
+    )
+    ap.add_argument(
+        "--annotate",
+        action="store_true",
+        help="draw numbered callouts on 00_orientation.png",
+    )
+    ap.add_argument(
+        "--plan", type=Path, default=None, help="JSON verdict plan keyed by task number"
+    )
+    ap.add_argument(
+        "--csv",
+        type=Path,
+        default=cap.DEFAULT_CSV,
+        help="ground-truth CSV (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=cap.DEFAULT_OUT_DIR,
+        help="output root (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--answer-timeout",
+        type=float,
+        default=600.0,
+        help="seconds to wait for an answer/refine (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--step-timeout",
+        type=float,
+        default=180.0,
+        help="seconds to wait for a verdict draft / submit (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--allow-offline",
+        action="store_true",
+        help="proceed even if the UI is in offline (fabricated) mode",
+    )
     ap.add_argument("--headed", action="store_true", help="show the browser")
+    ap.add_argument(
+        "--show-footage",
+        action="store_true",
+        help="don't blur the camera videos (internal use only: the "
+        "CASTLE terms forbid sharing footage, so never put these "
+        "screenshots in the participant form)",
+    )
     return ap.parse_args(argv)
 
 
@@ -143,10 +185,13 @@ def unhidden(page: Any, element_id: str, timeout_s: float) -> None:
 
 
 def is_unhidden(page: Any, element_id: str) -> bool:
-    return bool(page.evaluate(
-        "id => { const el = document.getElementById(id); return !!el && !el.hidden; }",
-        element_id,
-    ))
+    return bool(
+        page.evaluate(
+            "id => { const el = document.getElementById(id);"
+            " return !!el && !el.hidden; }",
+            element_id,
+        )
+    )
 
 
 def export_thread(page: Any) -> Dict[str, Any]:
@@ -163,7 +208,17 @@ def read_mode(page: Any) -> str:
     return "live" if cap.is_live_badge(badge.inner_text()) else "offline"
 
 
+MASK_FOOTAGE = True  # set from --show-footage in main()
+
+
 def shoot(page: Any, path: Path) -> str:
+    if MASK_FOOTAGE:
+        settle(page, 0.3)
+        unmasked = int(page.evaluate(cap.FOOTAGE_UNMASKED_JS) or 0)
+        if unmasked:
+            raise RuntimeError(
+                f"{unmasked} camera video(s) not blurred; refusing to save {path.name}"
+            )
     page.screenshot(path=str(path))
     log(f"  saved {path}")
     return path.name
@@ -195,8 +250,11 @@ def orientation_boxes(page: Any) -> List[tuple]:
         loc = loc.last if selector == cap.SEL_GROUP_CARD else loc.first
         box = loc.bounding_box() if loc.count() else None
         targets.append(
-            (number, label,
-             (box["x"], box["y"], box["width"], box["height"]) if box else None)
+            (
+                number,
+                label,
+                (box["x"], box["y"], box["width"], box["height"]) if box else None,
+            )
         )
     return targets
 
@@ -301,9 +359,14 @@ def run_task(
         json.dumps(export, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     return cap.build_task_entry(
-        task, export, mirror,
-        mode=mode, task_dir=task.dir_name, screenshots=shots,
-        verdicts=verdicts, converged=converged,
+        task,
+        export,
+        mirror,
+        mode=mode,
+        task_dir=task.dir_name,
+        screenshots=shots,
+        verdicts=verdicts,
+        converged=converged,
     )
 
 
@@ -339,7 +402,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
 
     ctx_kwargs: Dict[str, Any] = {
-        "viewport": VIEWPORT, "device_scale_factor": SCALE, "accept_downloads": True,
+        "viewport": VIEWPORT,
+        "device_scale_factor": SCALE,
+        "accept_downloads": True,
     }
     auth = os.environ.get("CASTLERAG_UI_BASIC_AUTH", "")
     if auth:
@@ -350,6 +415,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=not args.headed)
         context = browser.new_context(**ctx_kwargs)
+        global MASK_FOOTAGE
+        MASK_FOOTAGE = not args.show_footage
+        if MASK_FOOTAGE:
+            context.add_init_script(cap.FOOTAGE_MASK_INIT_JS)
+        else:
+            log(
+                "WARNING: --show-footage: screenshots show dataset footage; "
+                "internal use only"
+            )
         page = context.new_page()
         page.set_default_timeout(60_000)
 
@@ -384,8 +458,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     pass
                 continue
             entries.append(entry)
-            log(f"  answer_mentions_truth={entry['answer_mentions_truth']} "
-                f"(truth {task.truth!r}; check by hand)")
+            log(
+                f"  answer_mentions_truth={entry['answer_mentions_truth']} "
+                f"(truth {task.truth!r}; check by hand)"
+            )
         browser.close()
 
     out = args.out / "manifest.json"
@@ -402,6 +478,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         ui_url=args.url,
         mode=run_mode,
         created=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        footage_masked=not args.show_footage,
     )
     out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     log(f"wrote {out} ({len(entries)} tasks, mode={run_mode})")

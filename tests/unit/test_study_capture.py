@@ -428,11 +428,14 @@ def test_camera_frame_class_matches_ui():
     assert 'className="camera-frame"' in src
 
 
-def test_export_warns_when_footage_not_masked():
+def test_export_footage_check_is_per_selected_task():
     m = _form_manifest()
-    m["footage_masked"] = False
+    m["footage_masked"] = False  # some other task in the merged run was unmasked
     plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
-    assert any("unblurred dataset footage" in w for w in plan["warnings"])
+    assert plan["warnings"] == []
+    del m["tasks"][0]["footage_masked"]  # capture from before the per-task flag
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert any("practice (task 3) was not captured" in w for w in plan["warnings"])
 
 
 def test_form_export_prefers_crops():

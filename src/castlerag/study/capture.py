@@ -772,17 +772,12 @@ def form_export_plan(
     heuristic). Raises ``KeyError`` for a slot whose task isn't in the manifest.
     """
     by_task = {int(e["task"]): e for e in manifest.get("tasks", [])}
-    if not manifest.get("footage_masked"):
-        warnings_pre = [
-            "screenshots show unblurred dataset footage (captured with "
-            "--show-footage); do not put them in the participant form"
-        ]
-    else:
-        warnings_pre = []
     copies: List[Tuple[str, str]] = []
     tasks: Dict[str, Dict[str, str]] = {}
     footage: Dict[str, Dict[str, str]] = {}
-    warnings: List[str] = list(warnings_pre)
+    # Footage safety is checked per selected task below; the manifest-level
+    # footage_masked flag is capture metadata only.
+    warnings: List[str] = []
     orientation: Optional[str] = None
     for task_entry in by_task.values():
         for shot in task_entry.get("screenshots") or []:

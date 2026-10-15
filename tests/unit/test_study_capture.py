@@ -432,3 +432,11 @@ def test_export_warns_when_footage_not_masked():
     m["footage_masked"] = False
     plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
     assert any("unblurred dataset footage" in w for w in plan["warnings"])
+
+
+def test_form_export_prefers_crops():
+    m = _form_manifest()
+    m["tasks"][1]["screenshots"].append("task08_x/02_evidence_crop.png")
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert ("task08_x/02_evidence_crop.png", "t1_02_evidence.png") in plan["copies"]
+    assert ("task08_x/01_answer.png", "t1_01_answer.png") in plan["copies"]

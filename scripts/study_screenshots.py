@@ -224,6 +224,54 @@ def shoot(page: Any, path: Path) -> str:
     return path.name
 
 
+REGION_JS = """(sels) => {
+  const rects = [];
+  for (const spec of sels) {
+    const [sel, which] = spec.split('::');
+    const els = Array.from(document.querySelectorAll(sel)).filter(e => {
+      const r = e.getBoundingClientRect(); return r.width && r.height && !e.hidden; });
+    const pick = which === 'last' ? els.slice(-1) : els;
+    for (const e of pick) rects.push(e.getBoundingClientRect());
+  }
+  if (!rects.length) return null;
+  const x0 = Math.min(...rects.map(r => r.left));
+  const y0 = Math.min(...rects.map(r => r.top));
+  const x1 = Math.max(...rects.map(r => r.right));
+  const y1 = Math.max(...rects.map(r => r.bottom));
+  return {x: x0, y: y0, width: x1 - x0, height: y1 - y0};
+}"""
+
+
+def shoot_region(
+    page: Any, path: Path, selectors: List[str], pad: int = 12
+) -> Optional[str]:
+    """Save just the part of the page a study step is about, so it stays
+    readable at Google Forms' image width. ``sel::last`` takes the last match.
+    Same footage check as ``shoot``; returns None when nothing matched."""
+    box = page.evaluate(REGION_JS, selectors)
+    if not box:
+        log(f"  no region for {path.name} ({selectors})")
+        return None
+    vp = page.viewport_size
+    x, y = max(0, box["x"] - pad), max(0, box["y"] - pad)
+    clip = {
+        "x": x,
+        "y": y,
+        "width": min(vp["width"] - x, box["width"] + 2 * pad),
+        "height": min(vp["height"] - y, box["height"] + 2 * pad),
+    }
+    if MASK_FOOTAGE and int(page.evaluate(cap.FOOTAGE_UNMASKED_JS) or 0):
+        raise RuntimeError(f"camera video not blurred; refusing to save {path.name}")
+    page.screenshot(path=str(path), clip=clip)
+    log(f"  saved {path}")
+    return path.name
+
+
+def _keep(shots: List[str], name: Optional[str]) -> None:
+    if name:
+        shots.append(name)
+
+
 def fit_viewer(page: Any) -> None:
     """Grow the viewport so the whole evidence viewer (cameras, scores, review
     row, drafted refined query) fits without its internal scroll."""
@@ -289,12 +337,26 @@ def run_task(
     settle(page)
     page.locator(cap.SEL_GROUP_CARD).last.scroll_into_view_if_needed()
     shots.append(shoot(page, task_dir / "01_answer.png"))
+    _keep(
+        shots,
+        shoot_region(
+            page, task_dir / "01_answer_crop.png", [cap.SEL_GROUP_CARD + "::last"]
+        ),
+    )
 
     # 2. select the top evidence moment of the new card
     page.locator(cap.SEL_GROUP_CARD).last.locator(cap.SEL_MOMENT_BUTTON).first.click()
     page.locator(cap.SEL_CAMERA_TILE).first.wait_for(state="visible")
     settle(page, 2.5)  # iframes + Plotly score chart
     shots.append(shoot(page, task_dir / "02_evidence.png"))
+    _keep(
+        shots,
+        shoot_region(
+            page,
+            task_dir / "02_evidence_crop.png",
+            [cap.SEL_CAMERA_GRID, cap.SEL_EVIDENCE_FIGURE],
+        ),
+    )
 
     # 3. verdicts on the displayed cameras
     export = export_thread(page)
@@ -325,6 +387,14 @@ def run_task(
     settle(page)
     fit_viewer(page)  # review row + drafted refined query both on screen
     shots.append(shoot(page, task_dir / "03_review.png"))
+    _keep(
+        shots,
+        shoot_region(
+            page,
+            task_dir / "03_review_crop.png",
+            [cap.SEL_REVIEW_ROW, cap.SEL_COMPOSE_WRAP, "#converged-banner"],
+        ),
+    )
 
     if task.number == args.orientation:
         page.locator(cap.SEL_GROUP_CARD).last.scroll_into_view_if_needed()
@@ -353,6 +423,12 @@ def run_task(
         settle(page, 2.5)
         page.locator(cap.SEL_GROUP_CARD).last.scroll_into_view_if_needed()
         shots.append(shoot(page, task_dir / "04_refined.png"))
+        _keep(
+            shots,
+            shoot_region(
+                page, task_dir / "04_refined_crop.png", [cap.SEL_GROUP_CARD + "::last"]
+            ),
+        )
 
     export = export_thread(page)
     (task_dir / "thread.json").write_text(

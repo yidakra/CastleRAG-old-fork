@@ -807,7 +807,14 @@ def form_export_plan(
             )
         names = {Path(str(s)).name for s in entry.get("screenshots") or []}
         for step in FORM_STEPS:
-            if f"{step}.png" in names:
+            if f"{step}_crop.png" in names:  # readable at the form's image width
+                copies.append(
+                    (
+                        str(Path(str(entry["dir"])) / f"{step}_crop.png"),
+                        f"{slot}_{step}.png",
+                    )
+                )
+            elif f"{step}.png" in names:
                 copies.append(
                     (str(Path(str(entry["dir"])) / f"{step}.png"), f"{slot}_{step}.png")
                 )

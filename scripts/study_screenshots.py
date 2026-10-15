@@ -60,6 +60,10 @@ VIEWPORT = {"width": 1600, "height": 1000}
 SCALE = 2  # device-scale factor: crisp screenshots for the paper/slides
 
 
+class OfflineError(RuntimeError):
+    """The UI dropped out of live mode mid-run (e.g. the job restarted)."""
+
+
 def log(msg: str) -> None:
     print(f"[study] {msg}", flush=True)
 
@@ -217,7 +221,7 @@ def run_task(
     page.goto(args.url, wait_until="networkidle", timeout=60_000)
     mode = read_mode(page)
     if mode != "live" and not args.allow_offline:
-        raise SystemExit(offline_refusal(args.url))
+        raise OfflineError(offline_refusal(args.url))
 
     # 1. ask, wait for the answer card
     before = card_count(page)
@@ -359,13 +363,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             log("WARNING: --allow-offline set; answers below are FABRICATED")
 
         failed: List[int] = []
+        went_offline = False
         for task in tasks:
             if task.number not in selected:
                 continue
             try:
                 entry = run_task(page, task, args, plan, mirror)
-            except SystemExit:
-                raise
+            except OfflineError as exc:
+                # Stop, but still write the manifest for tasks already captured.
+                sys.stderr.write(str(exc))
+                went_offline = True
+                break
             except Exception as exc:  # keep going; one slow task shouldn't sink the run
                 failed.append(task.number)
                 log(f"  ERROR task {task.number}: {exc}")
@@ -384,7 +392,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     previous: List[Dict[str, Any]] = []
     if out.exists():  # keep tasks captured by earlier runs that weren't re-run
         previous = json.loads(out.read_text(encoding="utf-8")).get("tasks", [])
-    entries = cap.merge_entries(previous, entries)
+    # Selected tasks are replaced even if they failed this time, so the manifest
+    # never points at a stale earlier capture of a task we just re-ran.
+    entries = cap.merge_entries(previous, entries, rerun=selected)
     modes = {e.get("mode") for e in entries}
     run_mode = "live" if modes == {"live"} else "offline"
     manifest = cap.build_manifest(
@@ -395,6 +405,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     log(f"wrote {out} ({len(entries)} tasks, mode={run_mode})")
+    if went_offline:
+        return 3
     if failed:
         log(f"FAILED tasks: {failed} (see error.png in their folders)")
         return 1

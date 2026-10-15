@@ -204,6 +204,13 @@ def test_merge_entries():
     assert [(e["task"], e["v"]) for e in merged] == [
         (1, "new"), (2, "new"), (3, "old")
     ]
+    # Task 3 was re-run but failed: its stale entry must not survive.
+    rerun = cap.merge_entries(
+        [{"task": 1, "v": "old"}, {"task": 3, "v": "old"}],
+        [{"task": 1, "v": "new"}],
+        rerun=[1, 3],
+    )
+    assert [(e["task"], e["v"]) for e in rerun] == [(1, "new")]
 
 
 def test_callout_layout_scales_and_clamps():

@@ -525,11 +525,20 @@ def build_task_entry(
 
 
 def merge_entries(
-    previous: Sequence[Mapping[str, Any]], current: Sequence[Mapping[str, Any]]
+    previous: Sequence[Mapping[str, Any]],
+    current: Sequence[Mapping[str, Any]],
+    rerun: Iterable[int] = (),
 ) -> List[Dict[str, Any]]:
-    """Merge manifest entries by task number; ``current`` wins, sorted by task."""
+    """Merge manifest entries by task number; ``current`` wins, sorted by task.
+
+    Prior entries for tasks in ``rerun`` are dropped even when this run produced
+    no replacement (the task failed), so they can't masquerade as current.
+    """
+    dropped = {int(n) for n in rerun}
     merged: Dict[int, Dict[str, Any]] = {
-        int(e["task"]): dict(e) for e in previous if "task" in e
+        int(e["task"]): dict(e)
+        for e in previous
+        if "task" in e and int(e["task"]) not in dropped
     }
     merged.update({int(e["task"]): dict(e) for e in current})
     return [merged[k] for k in sorted(merged)]

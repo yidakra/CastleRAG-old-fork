@@ -11,12 +11,12 @@
 # (CPU only; see scripts/regen_frames.py). Needs the day's video downloaded
 # again and its chunks in place. Usage, from the repo root:
 #   sbatch --export=ALL,DAY=1 scripts/slurm/regen_frames.slurm
-# Optional: CONF (default configs/snellius_fixedcams.yaml), VIDEO_ROOT (dir
+# Optional: CONF (default configs/snellius_project.yaml), VIDEO_ROOT (dir
 # holding dayN/ if the video moved since ingest), WORKERS (default 48).
 set -uo pipefail
 DAY="${DAY:?set DAY=1..4}"
 case "$DAY" in 1|2|3|4) ;; *) echo "ABORT: DAY must be 1-4"; exit 1;; esac
-CONF="${CONF:-configs/snellius_fixedcams.yaml}"
+CONF="${CONF:-configs/snellius_project.yaml}"   # derived data live in /projects/prjs2298 since 2026-10-07
 WORKERS="${WORKERS:-48}"
 mkdir -p logs
 module purge; module load 2024; module load Python/3.12.3-GCCcore-13.3.0 FFmpeg/7.0.2-GCCcore-13.3.0

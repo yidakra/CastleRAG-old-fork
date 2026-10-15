@@ -27,7 +27,7 @@
 
 set -euo pipefail
 
-CONF="${CONF:-configs/snellius_me.yaml}"   # override: sbatch --export=ALL,CONF=configs/snellius_fixedcams.yaml
+CONF="${CONF:-configs/snellius_project.yaml}"   # index + derived data in /projects/prjs2298; scratch configs are stale
 SC="/scratch-shared/${USER}"
 COLL="castle_multimodal_v1"
 UI_PORT="${UI_PORT:-8050}"
@@ -39,7 +39,11 @@ export VLLM_LOGGING_LEVEL=WARNING
 module purge; module load 2024; module load Python/3.12.3-GCCcore-13.3.0 CUDA/12.6.0 FFmpeg/7.0.2-GCCcore-13.3.0
 source "${HOME}/castlerag_venv/bin/activate"
 cd "${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+PATHS="$(castlerag paths --config "${CONF}")" || { echo "ABORT: castlerag paths failed for ${CONF}"; exit 1; }
+eval "${PATHS}"
+QSTORE="${QDRANT_STORAGE:-${SC}/qdrant_storage}"
 mkdir -p logs
+echo "[ui] config=${CONF} qdrant_storage=${QSTORE}"
 
 echo "[ui] host=$(hostname) gpu=$(nvidia-smi -L 2>/dev/null | head -1) start=$(date -Iseconds)"
 
@@ -67,7 +71,7 @@ CUDA_VISIBLE_DEVICES=1 vllm serve Qwen/Qwen3-VL-8B-Instruct \
     > "${GEN_LOG}" 2>&1 &
 GEN_PID=$!
 # --- Qdrant against the EXISTING persisted storage (NO create-collection) ---
-export QDRANT__STORAGE__STORAGE_PATH="${SC}/qdrant_storage/storage"
+export QDRANT__STORAGE__STORAGE_PATH="${QSTORE}/storage"
 QLOG="logs/ui_qdrant_${SLURM_JOB_ID}.log"
 "${HOME}/qdrant/qdrant" > "${QLOG}" 2>&1 &
 QPID=$!
@@ -90,7 +94,7 @@ if [ "${PTS}" -lt 25000 ]; then
 fi
 
 # --- live engine wiring: embeddings -> :8200, rerank/generation -> :8201 ---
-export CASTLERAG_CONFIG="${CONF}"                      # host paths (scratch cache_dir, collection)
+export CASTLERAG_CONFIG="${CONF}"                      # host paths (cache_dir, frames, collection)
 export OMNIEMBED_BASE_URL="http://localhost:8200/v1"   # OmniEmbed query embeddings
 export VLLM_BASE_URL="http://localhost:8201/v1"        # Qwen3-VL rerank + generation
 # NOTE: OMNIEMBED_QUERY_CACHE intentionally UNSET so arbitrary UI queries embed live.

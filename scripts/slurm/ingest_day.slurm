@@ -62,7 +62,7 @@ case "${DAY}" in
 esac
 T="[ingest d${DAY}]"
 SC="/scratch-shared/${USER}"
-CONF="${CONF:-configs/snellius_fixedcams.yaml}"
+CONF="${CONF:-configs/snellius_project.yaml}"   # derived data live in /projects/prjs2298 since 2026-10-07
 COLL="castle_multimodal_v1"
 CAMS="${CAMS:-auto}"
 SKIP_BASE="${SKIP_BASE:-0}"       # 1 = chunks/frames already exist for CAMS
@@ -87,8 +87,9 @@ module purge; module load 2024; module load Python/3.12.3-GCCcore-13.3.0 CUDA/12
 source "${HOME}/castlerag_venv/bin/activate"
 cd "${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}" || exit 1
 mkdir -p logs
-# Every derived path comes from CONF (scratch for snellius_fixedcams.yaml, the
-# project space for snellius_project.yaml), so a job can't mix the two.
+# Every derived path comes from CONF (the project space for the default
+# snellius_project.yaml, scratch for the older snellius_fixedcams.yaml), so a
+# job can't mix the two.
 PATHS="$(castlerag paths --config "${CONF}")" || { echo "${T} ABORT: castlerag paths failed for ${CONF}"; exit 1; }
 eval "${PATHS}"
 RAW="${DATA_ROOT}/main/day${DAY}"

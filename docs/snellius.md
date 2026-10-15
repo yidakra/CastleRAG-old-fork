@@ -196,8 +196,10 @@ export OMNIEMBED_QUERY_CACHE=/scratch/$USER/castle_derived/embeddings/query_cach
 The Dash UI defaults to the **offline demo** engine so it always boots. The
 one-command way to run it against the **real** backend is the batch job
 `scripts/slurm/ui_live.slurm`, which boots OmniEmbed (:8200), Qwen3-VL (:8201)
-and Qdrant on the existing persisted index, then launches
-`castlerag ui --require-live --config configs/snellius_me.yaml`:
+and Qdrant on the existing persisted index in the project space, then launches
+`castlerag ui --require-live --config configs/snellius_project.yaml`. Qdrant
+storage and every derived path come from that config, so the UI serves the
+same four-day index the evaluation uses:
 
 ```bash
 sbatch --account=gisr109364 scripts/slurm/ui_live.slurm
@@ -215,7 +217,7 @@ demo-on-failure behavior.
 The env wiring it sets (mirror this if launching by hand):
 
 ```bash
-export CASTLERAG_CONFIG=configs/snellius_me.yaml
+export CASTLERAG_CONFIG=configs/snellius_project.yaml
 export OMNIEMBED_BASE_URL=http://localhost:8200/v1   # OmniEmbed query embeddings
 export VLLM_BASE_URL=http://localhost:8201/v1        # Qwen3-VL rerank + generation
 ```
@@ -223,7 +225,7 @@ export VLLM_BASE_URL=http://localhost:8201/v1        # Qwen3-VL rerank + generat
 Validate the backend **without** the UI (uses the query cache, so OmniEmbed isn't
 needed for the 5 smoke questions):
 `castlerag smoke-test /scratch-shared/$USER/questions.json --n 5 --config
-configs/snellius_me.yaml`. A fast headless check of the live engine + the review
+configs/snellius_project.yaml`. A fast headless check of the live engine + the review
 suggestions specifically is `scripts/_live_ui_check.sh` (run inside a 1-GPU
 `srun`; needs only Qwen3-VL + Qdrant + the query cache).
 

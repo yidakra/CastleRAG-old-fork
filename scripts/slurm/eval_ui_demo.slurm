@@ -9,7 +9,7 @@
 
 set -euo pipefail
 SC="/scratch-shared/${USER}"
-CONF="${CONF:-configs/snellius_me.yaml}"   # e.g. CONF=configs/snellius_project.yaml
+CONF="${CONF:-configs/snellius_project.yaml}"   # derived data live in /projects/prjs2298 since 2026-10-07
 QFILE="data/smoke_day1.csv"   # 40 day-1 questions with ground truth
 
 export HF_HOME="${SC}/hf_cache" HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 VLLM_LOGGING_LEVEL=WARNING

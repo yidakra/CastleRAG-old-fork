@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-CONF="${CONF:-configs/snellius_me.yaml}"   # override: sbatch --export=ALL,CONF=configs/snellius_fixedcams.yaml
+CONF="${CONF:-configs/snellius_project.yaml}"   # derived data live in /projects/prjs2298 since 2026-10-07
 DAY="${DAY:-}"   # e.g. DAY=day1: pin retrieval to day 1 for questions that name no day (multi-day index)
 # EXCLUDE=fixed: ego-only retrieval ablation (all room cameras); EXCLUDE=Kitchen:Reading for
 # a custom list. Use colons, not commas: `sbatch --export` splits its value on commas.

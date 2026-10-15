@@ -11,7 +11,7 @@
 # scripts/thin_frames.py --apply:
 #   sbatch --export=ALL,DAY=1 scripts/slurm/upload_artifacts.slurm
 # Optional: REPO=<owner/name> (default yidakra/castlerag-artifacts), FRAMES=1
-# to add the thinned frames, CONF=<config> (default configs/snellius_fixedcams.yaml).
+# to add the thinned frames, CONF=<config> (default configs/snellius_project.yaml).
 #
 # Frames are off by default: a free HF account has 100 GB of private storage
 # and thinned frames are ~130 GB per day. They are also the cheap part, cut on
@@ -27,7 +27,7 @@ DAY="${DAY:?set DAY=1..4}"
 case "$DAY" in 1|2|3|4) ;; *) echo "ABORT: DAY must be 1-4"; exit 1;; esac
 REPO="${REPO:-yidakra/castlerag-artifacts}"
 FRAMES="${FRAMES:-0}"
-CONF="${CONF:-configs/snellius_fixedcams.yaml}"
+CONF="${CONF:-configs/snellius_project.yaml}"   # derived data live in /projects/prjs2298 since 2026-10-07
 HF_VENV="${HF_VENV:-$HOME/hfdl_venv}"
 CASTLE_VENV="${CASTLE_VENV:-$HOME/castlerag_venv}"
 SC="/scratch-shared/$USER"

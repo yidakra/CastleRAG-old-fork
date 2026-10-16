@@ -338,6 +338,7 @@ def _form_manifest(mode="live"):
             "question": f"Q{n}?",
             "mode": mode,
             "answer_mentions_truth": right,
+            "footage_masked": True,
             "screenshots": shots,
             "displayed_cameras": [
                 {
@@ -355,13 +356,14 @@ def _form_manifest(mode="live"):
         }
 
     return {
+        "footage_masked": True,
         "tasks": [
             entry(3, True, orientation=True),
             entry(8, True),
             entry(9, True),
             entry(7, True),
             entry(4, False),
-        ]
+        ],
     }
 
 
@@ -410,3 +412,45 @@ def test_form_constants_js_is_valid_object_literals():
     )
     js = cap.form_constants_js(plan)
     assert js.startswith("const TASKS = {") and "const FOOTAGE = {" in js
+
+
+def test_footage_mask_targets_the_camera_iframes():
+    assert (
+        "iframe.camera-frame" in cap.FOOTAGE_MASK_CSS
+        and "blur(" in cap.FOOTAGE_MASK_CSS
+    )
+    assert "study-footage-mask" in cap.FOOTAGE_MASK_INIT_JS
+    assert cap.SEL_FOOTAGE in cap.FOOTAGE_UNMASKED_JS
+
+
+def test_camera_frame_class_matches_ui():
+    src = Path(cap.__file__).parents[1].joinpath("ui", "callbacks.py").read_text()
+    assert 'className="camera-frame"' in src
+
+
+def test_export_footage_check_is_per_selected_task():
+    m = _form_manifest()
+    m["footage_masked"] = False  # some other task in the merged run was unmasked
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert plan["warnings"] == []
+    del m["tasks"][0]["footage_masked"]  # capture from before the per-task flag
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert any("practice (task 3) was not captured" in w for w in plan["warnings"])
+
+
+def test_form_export_prefers_crops():
+    m = _form_manifest()
+    m["tasks"][1]["screenshots"].append("task08_x/02_evidence_crop.png")
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert ("task08_x/02_evidence_crop.png", "t1_02_evidence.png") in plan["copies"]
+    assert ("task08_x/01_answer.png", "t1_01_answer.png") in plan["copies"]
+
+
+def test_export_warns_per_task_when_a_merged_task_is_unmasked():
+    m = _form_manifest()
+    m["tasks"][1]["footage_masked"] = False  # task 8, an earlier --show-footage run
+    plan = cap.form_export_plan(m, cap.parse_slots("practice=3,t1=8,t2=9,t3=7,t4=4"))
+    assert any(
+        "t1 (task 8) was not captured with blurred footage" in w
+        for w in plan["warnings"]
+    )

@@ -70,32 +70,74 @@ def log(msg: str) -> None:
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--url", default=cap.DEFAULT_UI_URL,
-                    help="dashboard URL (default: %(default)s, the ui_live.slurm port)")
-    ap.add_argument("--questions", default=None,
-                    help="file with one question per line, or '|'-separated "
-                         "questions (default: the 9 study candidates)")
-    ap.add_argument("--tasks", default="all",
-                    help="task numbers to run, e.g. '1,3-5' (default: all)")
-    ap.add_argument("--orientation", type=int, default=1,
-                    help="task number that also gets 00_orientation.png "
-                         "(0 disables; default: %(default)s)")
-    ap.add_argument("--annotate", action="store_true",
-                    help="draw numbered callouts on 00_orientation.png")
-    ap.add_argument("--plan", type=Path, default=None,
-                    help="JSON verdict plan keyed by task number")
-    ap.add_argument("--csv", type=Path, default=cap.DEFAULT_CSV,
-                    help="ground-truth CSV (default: %(default)s)")
-    ap.add_argument("--out", type=Path, default=cap.DEFAULT_OUT_DIR,
-                    help="output root (default: %(default)s)")
-    ap.add_argument("--answer-timeout", type=float, default=600.0,
-                    help="seconds to wait for an answer/refine (default: %(default)s)")
-    ap.add_argument("--step-timeout", type=float, default=180.0,
-                    help="seconds to wait for a verdict draft / submit "
-                         "(default: %(default)s)")
-    ap.add_argument("--allow-offline", action="store_true",
-                    help="proceed even if the UI is in offline (fabricated) mode")
+    ap.add_argument(
+        "--url",
+        default=cap.DEFAULT_UI_URL,
+        help="dashboard URL (default: %(default)s, the ui_live.slurm port)",
+    )
+    ap.add_argument(
+        "--questions",
+        default=None,
+        help="file with one question per line, or '|'-separated "
+        "questions (default: the 9 study candidates)",
+    )
+    ap.add_argument(
+        "--tasks",
+        default="all",
+        help="task numbers to run, e.g. '1,3-5' (default: all)",
+    )
+    ap.add_argument(
+        "--orientation",
+        type=int,
+        default=1,
+        help="task number that also gets 00_orientation.png "
+        "(0 disables; default: %(default)s)",
+    )
+    ap.add_argument(
+        "--annotate",
+        action="store_true",
+        help="draw numbered callouts on 00_orientation.png",
+    )
+    ap.add_argument(
+        "--plan", type=Path, default=None, help="JSON verdict plan keyed by task number"
+    )
+    ap.add_argument(
+        "--csv",
+        type=Path,
+        default=cap.DEFAULT_CSV,
+        help="ground-truth CSV (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=cap.DEFAULT_OUT_DIR,
+        help="output root (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--answer-timeout",
+        type=float,
+        default=600.0,
+        help="seconds to wait for an answer/refine (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--step-timeout",
+        type=float,
+        default=180.0,
+        help="seconds to wait for a verdict draft / submit (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--allow-offline",
+        action="store_true",
+        help="proceed even if the UI is in offline (fabricated) mode",
+    )
     ap.add_argument("--headed", action="store_true", help="show the browser")
+    ap.add_argument(
+        "--show-footage",
+        action="store_true",
+        help="don't blur the camera videos (internal use only: the "
+        "CASTLE terms forbid sharing footage, so never put these "
+        "screenshots in the participant form)",
+    )
     return ap.parse_args(argv)
 
 
@@ -143,10 +185,13 @@ def unhidden(page: Any, element_id: str, timeout_s: float) -> None:
 
 
 def is_unhidden(page: Any, element_id: str) -> bool:
-    return bool(page.evaluate(
-        "id => { const el = document.getElementById(id); return !!el && !el.hidden; }",
-        element_id,
-    ))
+    return bool(
+        page.evaluate(
+            "id => { const el = document.getElementById(id);"
+            " return !!el && !el.hidden; }",
+            element_id,
+        )
+    )
 
 
 def export_thread(page: Any) -> Dict[str, Any]:
@@ -163,10 +208,68 @@ def read_mode(page: Any) -> str:
     return "live" if cap.is_live_badge(badge.inner_text()) else "offline"
 
 
+MASK_FOOTAGE = True  # set from --show-footage in main()
+
+
 def shoot(page: Any, path: Path) -> str:
+    if MASK_FOOTAGE:
+        settle(page, 0.3)
+        unmasked = int(page.evaluate(cap.FOOTAGE_UNMASKED_JS) or 0)
+        if unmasked:
+            raise RuntimeError(
+                f"{unmasked} camera video(s) not blurred; refusing to save {path.name}"
+            )
     page.screenshot(path=str(path))
     log(f"  saved {path}")
     return path.name
+
+
+REGION_JS = """(sels) => {
+  const rects = [];
+  for (const spec of sels) {
+    const [sel, which] = spec.split('::');
+    const els = Array.from(document.querySelectorAll(sel)).filter(e => {
+      const r = e.getBoundingClientRect(); return r.width && r.height && !e.hidden; });
+    const pick = which === 'last' ? els.slice(-1) : els;
+    for (const e of pick) rects.push(e.getBoundingClientRect());
+  }
+  if (!rects.length) return null;
+  const x0 = Math.min(...rects.map(r => r.left));
+  const y0 = Math.min(...rects.map(r => r.top));
+  const x1 = Math.max(...rects.map(r => r.right));
+  const y1 = Math.max(...rects.map(r => r.bottom));
+  return {x: x0, y: y0, width: x1 - x0, height: y1 - y0};
+}"""
+
+
+def shoot_region(
+    page: Any, path: Path, selectors: List[str], pad: int = 12
+) -> Optional[str]:
+    """Save just the part of the page a study step is about, so it stays
+    readable at Google Forms' image width. ``sel::last`` takes the last match.
+    Same footage check as ``shoot``; returns None when nothing matched."""
+    box = page.evaluate(REGION_JS, selectors)
+    if not box:
+        log(f"  no region for {path.name} ({selectors})")
+        return None
+    vp = page.viewport_size
+    x, y = max(0, box["x"] - pad), max(0, box["y"] - pad)
+    clip = {
+        "x": x,
+        "y": y,
+        "width": min(vp["width"] - x, box["width"] + 2 * pad),
+        "height": min(vp["height"] - y, box["height"] + 2 * pad),
+    }
+    if MASK_FOOTAGE and int(page.evaluate(cap.FOOTAGE_UNMASKED_JS) or 0):
+        raise RuntimeError(f"camera video not blurred; refusing to save {path.name}")
+    page.screenshot(path=str(path), clip=clip)
+    log(f"  saved {path}")
+    return path.name
+
+
+def _keep(shots: List[str], name: Optional[str]) -> None:
+    if name:
+        shots.append(name)
 
 
 def fit_viewer(page: Any) -> None:
@@ -195,8 +298,11 @@ def orientation_boxes(page: Any) -> List[tuple]:
         loc = loc.last if selector == cap.SEL_GROUP_CARD else loc.first
         box = loc.bounding_box() if loc.count() else None
         targets.append(
-            (number, label,
-             (box["x"], box["y"], box["width"], box["height"]) if box else None)
+            (
+                number,
+                label,
+                (box["x"], box["y"], box["width"], box["height"]) if box else None,
+            )
         )
     return targets
 
@@ -231,12 +337,26 @@ def run_task(
     settle(page)
     page.locator(cap.SEL_GROUP_CARD).last.scroll_into_view_if_needed()
     shots.append(shoot(page, task_dir / "01_answer.png"))
+    _keep(
+        shots,
+        shoot_region(
+            page, task_dir / "01_answer_crop.png", [cap.SEL_GROUP_CARD + "::last"]
+        ),
+    )
 
     # 2. select the top evidence moment of the new card
     page.locator(cap.SEL_GROUP_CARD).last.locator(cap.SEL_MOMENT_BUTTON).first.click()
     page.locator(cap.SEL_CAMERA_TILE).first.wait_for(state="visible")
     settle(page, 2.5)  # iframes + Plotly score chart
     shots.append(shoot(page, task_dir / "02_evidence.png"))
+    _keep(
+        shots,
+        shoot_region(
+            page,
+            task_dir / "02_evidence_crop.png",
+            [cap.SEL_CAMERA_GRID, cap.SEL_EVIDENCE_FIGURE],
+        ),
+    )
 
     # 3. verdicts on the displayed cameras
     export = export_thread(page)
@@ -267,6 +387,14 @@ def run_task(
     settle(page)
     fit_viewer(page)  # review row + drafted refined query both on screen
     shots.append(shoot(page, task_dir / "03_review.png"))
+    _keep(
+        shots,
+        shoot_region(
+            page,
+            task_dir / "03_review_crop.png",
+            [cap.SEL_REVIEW_ROW, cap.SEL_COMPOSE_WRAP, "#converged-banner"],
+        ),
+    )
 
     if task.number == args.orientation:
         page.locator(cap.SEL_GROUP_CARD).last.scroll_into_view_if_needed()
@@ -295,16 +423,29 @@ def run_task(
         settle(page, 2.5)
         page.locator(cap.SEL_GROUP_CARD).last.scroll_into_view_if_needed()
         shots.append(shoot(page, task_dir / "04_refined.png"))
+        _keep(
+            shots,
+            shoot_region(
+                page, task_dir / "04_refined_crop.png", [cap.SEL_GROUP_CARD + "::last"]
+            ),
+        )
 
     export = export_thread(page)
     (task_dir / "thread.json").write_text(
         json.dumps(export, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    return cap.build_task_entry(
-        task, export, mirror,
-        mode=mode, task_dir=task.dir_name, screenshots=shots,
-        verdicts=verdicts, converged=converged,
+    entry = cap.build_task_entry(
+        task,
+        export,
+        mirror,
+        mode=mode,
+        task_dir=task.dir_name,
+        screenshots=shots,
+        verdicts=verdicts,
+        converged=converged,
     )
+    entry["footage_masked"] = MASK_FOOTAGE  # per task: merged manifests keep it
+    return entry
 
 
 def offline_refusal(url: str) -> str:
@@ -339,7 +480,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
 
     ctx_kwargs: Dict[str, Any] = {
-        "viewport": VIEWPORT, "device_scale_factor": SCALE, "accept_downloads": True,
+        "viewport": VIEWPORT,
+        "device_scale_factor": SCALE,
+        "accept_downloads": True,
     }
     auth = os.environ.get("CASTLERAG_UI_BASIC_AUTH", "")
     if auth:
@@ -350,6 +493,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=not args.headed)
         context = browser.new_context(**ctx_kwargs)
+        global MASK_FOOTAGE
+        MASK_FOOTAGE = not args.show_footage
+        if MASK_FOOTAGE:
+            context.add_init_script(cap.FOOTAGE_MASK_INIT_JS)
+        else:
+            log(
+                "WARNING: --show-footage: screenshots show dataset footage; "
+                "internal use only"
+            )
         page = context.new_page()
         page.set_default_timeout(60_000)
 
@@ -379,13 +531,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 log(f"  ERROR task {task.number}: {exc}")
                 err = args.out / task.dir_name / "error.png"
                 try:
-                    page.screenshot(path=str(err))
-                except Exception:
-                    pass
+                    shoot(page, err)  # same footage check as every other screenshot
+                except Exception as shot_exc:
+                    log(f"  no error.png for task {task.number}: {shot_exc}")
                 continue
             entries.append(entry)
-            log(f"  answer_mentions_truth={entry['answer_mentions_truth']} "
-                f"(truth {task.truth!r}; check by hand)")
+            log(
+                f"  answer_mentions_truth={entry['answer_mentions_truth']} "
+                f"(truth {task.truth!r}; check by hand)"
+            )
         browser.close()
 
     out = args.out / "manifest.json"
@@ -402,6 +556,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         ui_url=args.url,
         mode=run_mode,
         created=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        # True only if every task in the merged manifest was captured blurred.
+        footage_masked=all(e.get("footage_masked") is True for e in entries),
     )
     out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     log(f"wrote {out} ({len(entries)} tasks, mode={run_mode})")
